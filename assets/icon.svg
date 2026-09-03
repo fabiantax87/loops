@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!--
+    Loops.
+
+    An open loop: a ring that doesn't close, with the ball sitting loose in the
+    gap. That is the whole product in one mark — something unresolved, and a
+    question about whose move it is. Green is the app's only accent colour.
+
+    The geometry is deliberately heavy so it survives being 16px in a menu bar.
+  -->
+  <defs>
+    <linearGradient id="ground" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#161a18"/>
+      <stop offset="1" stop-color="#0a0b0b"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="92" y="92" width="840" height="840" rx="188" fill="url(#ground)"/>
+  <rect x="92.5" y="92.5" width="839" height="839" rx="187.5" fill="none"
+        stroke="#232826" stroke-width="1"/>
+
+  <!-- The ring, opened at the top right. 266° of 360°, rounded off. -->
+  <circle cx="512" cy="512" r="250" fill="none" stroke="#35a97f" stroke-width="88"
+          stroke-linecap="round" stroke-dasharray="1162 409"
+          transform="rotate(2 512 512)"/>
+
+  <!-- The ball, out of the loop. -->
+  <circle cx="703" cy="351" r="62" fill="#e6eae8"/>
+</svg>

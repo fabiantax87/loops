@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!--
+    The menu-bar mark. macOS treats this as a template image: only the alpha
+    matters, so everything is flat black and the system tints it to match the
+    bar. No background, and a touch more weight than the app icon so the ring
+    doesn't disappear at 18pt.
+  -->
+  <circle cx="128" cy="128" r="72" fill="none" stroke="#000" stroke-width="30"
+          stroke-linecap="round" stroke-dasharray="335 118"
+          transform="rotate(2 128 128)"/>
+  <circle cx="183" cy="82" r="20" fill="#000"/>
+</svg>

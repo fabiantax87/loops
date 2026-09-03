@@ -1,0 +1,7 @@
+fill none stroke black stroke-width 30
+stroke-linecap round
+arc 56,56 200,200 2,268
+stroke none fill black
+circle 200.0,130.5 200.0,145.5
+circle 125.5,56.0 125.5,71.0
+circle 183,82 183,102

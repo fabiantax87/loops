@@ -1,0 +1,109 @@
+@import "tailwindcss";
+
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/500.css";
+@import "@fontsource/ibm-plex-sans/600.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+
+/* The palette from the design canvas. Three colours carry meaning and nothing
+   else may borrow them:
+     red   — a todo past its deadline. Only that.
+     amber — a check-in that has arrived: someone to chase.
+     green — the one affirmative action on a screen.
+   Everything else is one of the greys. */
+@theme {
+  --color-ink: #0a0b0b;          /* app background */
+  --color-panel: #101211;        /* window body */
+  --color-rail: #0d0f0e;         /* sidebar */
+  --color-chrome: #151817;       /* title bar, hover fill */
+  --color-hover: #191d1b;
+
+  --color-hairline: #1a1e1c;     /* row separators */
+  --color-edge: #191d1b;         /* sidebar divider */
+  --color-frame: #232826;        /* window border */
+  --color-quiet-dot: #2b312e;    /* a healthy client's dot */
+  --color-outline: #2b312e;      /* ghost button border */
+  --color-outline-hover: #3c443f;
+
+  --color-text: #e6eae8;
+  --color-soft: #b6bcb9;
+  --color-muted: #8d9591;
+  --color-faint: #626b67;
+  --color-sleeping: #6d7571;     /* a client with nothing to say */
+
+  /* The twelve-week strip: a healthy bar, a wobbling one, and the empty track. */
+  --color-bar: #3f4a45;
+  --color-bar-mid: #6f6242;
+  --color-bar-off: #212624;
+  --color-track: #262b29;
+
+  --color-green: #35a97f;
+  --color-green-hover: #4bbf93;
+  --color-amber: #cf9a34;
+  --color-red: #c9573f;
+
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-ink);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Tailwind's reset gives buttons `cursor: default`. In a desktop app built
+   almost entirely out of buttons, that reads as "nothing here is clickable". */
+button:not(:disabled),
+[role="button"],
+a[href] {
+  cursor: pointer;
+}
+
+/* A desktop app, not a document: no text selection or rubber-banding unless a
+   field asks for it. */
+body {
+  user-select: none;
+  overscroll-behavior: none;
+}
+
+input,
+textarea,
+[contenteditable] {
+  user-select: text;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: #1e2321;
+  border-radius: 6px;
+  border: 3px solid var(--color-panel);
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* The uppercase mono label that names a band or a section. */
+@utility label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* Mono for facts about time — "2 days late", "9 days silent". */
+@utility fact {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
