@@ -146,6 +146,7 @@ describe("routing by name", () => {
       contactId: null,
       kind: "todo",
       title: "Plan the staging migration",
+      notes: null,
       deadline: "2026-09-10",
       deadlineTime: null,
       ideaSince: null,

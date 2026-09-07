@@ -12,6 +12,7 @@ import type { Item } from "../domain/types";
 import { useClock } from "../lib/ClockContext";
 import { type Day, addDays, today } from "../lib/time";
 import { useStore } from "../state/store";
+import { EditItemSheet, NoteLine } from "./notes";
 import { Fact, InlineVerb, RowMenu, type MenuItem } from "./primitives";
 
 /* The rows. Every kind of item renders as a sentence with its verbs beside it:
@@ -316,6 +317,7 @@ export function WasInProgressBadge() {
 
 interface RowShellProps {
   title: string;
+  notes?: string | null;
   where: string;
   onOpen?: () => void;
   last?: boolean;
@@ -323,7 +325,7 @@ interface RowShellProps {
   lead?: ReactNode;
 }
 
-function RowShell({ title, where, onOpen, last, lead, children }: RowShellProps) {
+function RowShell({ title, notes, where, onOpen, last, lead, children }: RowShellProps) {
   return (
     <div
       className={`flex items-center gap-4 border-t border-hairline py-[17px] ${
@@ -338,6 +340,7 @@ function RowShell({ title, where, onOpen, last, lead, children }: RowShellProps)
         >
           {title}
         </span>
+        <NoteLine notes={notes ?? null} />
         {where && <span className="fact truncate text-faint">{where}</span>}
       </div>
       {children}
@@ -366,10 +369,12 @@ export function TodoRow({
 }) {
   const { act } = useStore();
   const [rescheduling, setRescheduling] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   return (
     <RowShell
       title={item.title}
+      notes={item.notes}
       where={where}
       last={last}
       onOpen={onOpen}
@@ -390,13 +395,16 @@ export function TodoRow({
         fact && <Fact tone={fact.tone}>{fact.text}</Fact>
       )}
       <div className="relative">
-        <RowMenu items={todoMenu(item, act, () => setRescheduling(true))} />
+        <RowMenu
+          items={todoMenu(item, act, () => setRescheduling(true), () => setEditing(true))}
+        />
         <ReschedulePopover
           item={item}
           open={rescheduling}
           onClose={() => setRescheduling(false)}
         />
       </div>
+      {editing && <EditItemSheet item={item} onClose={() => setEditing(false)} />}
     </RowShell>
   );
 }
@@ -413,12 +421,14 @@ export function CriticalRow({
 }) {
   const { act } = useStore();
   const [rescheduling, setRescheduling] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   return (
     <div className="mb-1.5 flex items-center gap-[18px] rounded-[10px] border border-[#40251f] bg-[#1a1210] px-[22px] py-[19px]">
       <span className="w-[3px] flex-none self-stretch rounded-sm bg-red" />
       <div className="flex min-w-0 flex-1 flex-col gap-[5px]">
         <span className="text-lg leading-[1.4] text-[#f0d9d3]">{item.title}</span>
+        <NoteLine notes={item.notes} />
         <span className="fact truncate text-[#a8837a]">{where}</span>
       </div>
       <span className="fact whitespace-nowrap text-[#e08b74]">{fact.text}</span>
@@ -438,6 +448,7 @@ export function CriticalRow({
       </div>
       <RowMenu
         items={[
+          { label: "Edit…", onSelect: () => setEditing(true) },
           {
             label: "It's done",
             onSelect: () => act((db, c) => items.close(db, c, item.id, "done")),
@@ -453,6 +464,7 @@ export function CriticalRow({
           },
         ]}
       />
+      {editing && <EditItemSheet item={item} onClose={() => setEditing(false)} />}
     </div>
   );
 }
@@ -474,9 +486,10 @@ export function WaitingRow({
   const { act } = useStore();
   const [replied, setReplied] = useState(false);
   const [checkin, setCheckin] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   return (
-    <RowShell title={item.title} where={where} last={last} onOpen={onOpen}>
+    <RowShell title={item.title} notes={item.notes} where={where} last={last} onOpen={onOpen}>
       {fact && <Fact tone={fact.tone}>{fact.text}</Fact>}
       <InlineVerb onClick={() => act((db, c) => items.chase(db, c, item.id))}>
         Chase
@@ -494,6 +507,7 @@ export function WaitingRow({
       <div className="relative">
         <RowMenu
           items={[
+            { label: "Edit…", onSelect: () => setEditing(true) },
             { label: "Set a check-in…", onSelect: () => setCheckin(true) },
             {
               label: "Drop it — it won't come",
@@ -515,6 +529,7 @@ export function WaitingRow({
           </div>
         </Popover>
       </div>
+      {editing && <EditItemSheet item={item} onClose={() => setEditing(false)} />}
     </RowShell>
   );
 }
@@ -534,8 +549,9 @@ export function IdeaRow({
   onOpen?: () => void;
 }) {
   const { act } = useStore();
+  const [editing, setEditing] = useState(false);
   return (
-    <RowShell title={item.title} where={where} last={last} onOpen={onOpen}>
+    <RowShell title={item.title} notes={item.notes} where={where} last={last} onOpen={onOpen}>
       {wasInProgress && <WasInProgressBadge />}
       <button
         type="button"
@@ -551,12 +567,20 @@ export function IdeaRow({
       >
         Not relevant
       </button>
+      <RowMenu items={[{ label: "Edit…", onSelect: () => setEditing(true) }]} />
+      {editing && <EditItemSheet item={item} onClose={() => setEditing(false)} />}
     </RowShell>
   );
 }
 
-function todoMenu(item: Item, act: ReturnType<typeof useStore>["act"], reschedule: () => void): MenuItem[] {
+function todoMenu(
+  item: Item,
+  act: ReturnType<typeof useStore>["act"],
+  reschedule: () => void,
+  edit: () => void,
+): MenuItem[] {
   return [
+    { label: "Edit…", onSelect: edit },
     {
       label: item.deadline === null ? "Give it a deadline…" : "Reschedule…",
       onSelect: reschedule,

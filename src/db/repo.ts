@@ -50,6 +50,7 @@ function item(r: Row): Item {
     contactId: r.contact_id,
     kind: r.kind,
     title: r.title,
+    notes: r.notes,
     deadline: r.deadline,
     deadlineTime: r.deadline_time,
     ideaSince: r.idea_since,
@@ -275,13 +276,22 @@ export const items = {
     db: SqlDriver,
     clock: Clock,
     id: number,
-    fields: { title?: string; projectId?: number | null; contactId?: number | null },
+    fields: {
+      title?: string;
+      notes?: string | null;
+      projectId?: number | null;
+      contactId?: number | null;
+    },
   ): Promise<void> {
     const sets: string[] = [];
     const params: unknown[] = [];
     if (fields.title !== undefined) {
       sets.push("title = ?");
       params.push(fields.title.trim());
+    }
+    if (fields.notes !== undefined) {
+      sets.push("notes = ?");
+      params.push(fields.notes?.trim() || null);
     }
     if (fields.projectId !== undefined) {
       sets.push("project_id = ?");

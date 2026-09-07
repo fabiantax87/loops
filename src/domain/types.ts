@@ -56,6 +56,8 @@ export interface Item {
   contactId: number | null;
   kind: ItemKind;
   title: string;
+  /** Whatever the title can't carry — context, links, a paragraph. */
+  notes: string | null;
   /** todo: the day it is owed. Null only on a todo picked up from an idea. */
   deadline: Day | null;
   /** Local 'HH:MM' on the deadline day, when a moment matters — reminder only. */
