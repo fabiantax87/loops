@@ -215,5 +215,11 @@ pub fn run() {
                 api.prevent_exit();
                 hide_main(app);
             }
+            // Opening the app while it is already running in the tray — the
+            // Dock icon, Spotlight, a double-click in Finder — lands here.
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen { .. } = &event {
+                show_main(app);
+            }
         });
 }
