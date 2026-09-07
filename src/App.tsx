@@ -38,7 +38,11 @@ function Workspace() {
     let stop: (() => void) | undefined;
     if ("__TAURI_INTERNALS__" in window) {
       void import("@tauri-apps/api/event").then(({ listen }) =>
-        listen("capture", () => setCapturing({})).then((un) => {
+        // The tray menu sends the item type along ("Capture Idea…"); the
+        // global shortcut sends nothing and lands on the default.
+        listen<CapturePreset | null>("capture", (event) =>
+          setCapturing(event.payload ?? {}),
+        ).then((un) => {
           stop = un;
         }),
       );

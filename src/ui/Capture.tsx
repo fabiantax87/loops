@@ -9,9 +9,9 @@ import { commitCapture } from "../state/commit";
 import { useSnapshot, useStore } from "../state/store";
 
 const KINDS: { kind: ItemKind; label: string; key: string }[] = [
-  { kind: "todo", label: "Todo", key: "1" },
-  { kind: "idea", label: "Idea", key: "2" },
-  { kind: "waiting", label: "Waiting-on", key: "3" },
+  { kind: "todo", label: "Todo", key: "⌥1" },
+  { kind: "idea", label: "Idea", key: "⌥2" },
+  { kind: "waiting", label: "Waiting-on", key: "⌥3" },
 ];
 
 const PLACEHOLDER: Record<ItemKind, string> = {
