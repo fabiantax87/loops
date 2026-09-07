@@ -86,7 +86,7 @@ function WhichOne({
 
 /**
  * The capture bar. One line in, one item out: the type is a three-way toggle
- * (⌥← → or ⌥1/2/3 without leaving the keyboard), routing comes from the names
+ * (⌥1/2/3 without leaving the keyboard), routing comes from the names
  * in the sentence, and the visible fields follow the type — a todo shows the
  * deadline it requires, an idea shows nothing, a waiting-on offers a check-in.
  */
@@ -145,11 +145,6 @@ export function Capture({
   const set = (patch: Partial<CaptureGuess>) =>
     setOverrides((current) => ({ ...current, ...patch }));
 
-  const cycleKind = (delta: number) => {
-    const index = KINDS.findIndex((k) => k.kind === kind);
-    setKind(KINDS[(index + delta + KINDS.length) % KINDS.length].kind);
-  };
-
   const save = () => {
     if (text.trim() === "") return;
     if (guess.ambiguous) {
@@ -185,16 +180,6 @@ export function Capture({
   const onKeys = (e: React.KeyboardEvent) => {
     if (e.key === "Escape") {
       onClose();
-      return;
-    }
-    if (e.altKey && e.key === "ArrowRight") {
-      e.preventDefault();
-      cycleKind(1);
-      return;
-    }
-    if (e.altKey && e.key === "ArrowLeft") {
-      e.preventDefault();
-      cycleKind(-1);
       return;
     }
     if (e.altKey && ["1", "2", "3", "¡", "€", "£"].includes(e.key)) {
@@ -252,7 +237,7 @@ export function Capture({
             </button>
           ))}
           <div className="flex-1" />
-          <span className="fact text-[11px] text-faint">⌥← → switches type</span>
+          <span className="fact text-[11px] text-faint">⌥1/2/3 switches type</span>
         </div>
 
         <div className="flex items-center gap-3 p-5">
