@@ -2,7 +2,7 @@ import { useState } from "react";
 import { contacts as contactRepo } from "../db/repo";
 import { buildClientPage, shortProjectName } from "../domain/clientPage";
 import { projectById, projectsOf } from "../domain/snapshot";
-import type { ItemKind } from "../domain/types";
+import type { Contact, ItemKind } from "../domain/types";
 import { useClock } from "../lib/ClockContext";
 import { useSnapshot, useStore } from "../state/store";
 import { BandLabel } from "./primitives";
@@ -32,6 +32,7 @@ export function ClientScreen({
   const { act } = useStore();
   const model = buildClientPage(snapshot, clock, clientId);
   const [addingContact, setAddingContact] = useState(false);
+  const [editingContact, setEditingContact] = useState<Contact | null>(null);
 
   return (
     <div className="flex w-[720px] flex-col gap-[52px] pt-14 pb-[72px]">
@@ -84,6 +85,13 @@ export function ClientScreen({
                 <div key={person.id} className="group flex items-baseline gap-2.5">
                   <span className="flex-1 truncate text-base text-text">{person.name}</span>
                   {detail && <span className="fact text-[11px] text-faint">{detail}</span>}
+                  <button
+                    type="button"
+                    onClick={() => setEditingContact(person)}
+                    className="fact text-[11px] text-transparent transition-colors group-hover:text-faint hover:!text-soft"
+                  >
+                    edit
+                  </button>
                   <button
                     type="button"
                     onClick={() => act((db) => contactRepo.remove(db, person.id))}
@@ -186,39 +194,54 @@ export function ClientScreen({
       </section>
 
       {addingContact && (
-        <NewContactSheet
+        <ContactSheet clientId={clientId} onClose={() => setAddingContact(false)} />
+      )}
+      {editingContact && (
+        <ContactSheet
           clientId={clientId}
-          onClose={() => setAddingContact(false)}
+          contact={editingContact}
+          onClose={() => setEditingContact(null)}
         />
       )}
     </div>
   );
 }
 
-/** Name, and one line saying which project and what they do. */
-function NewContactSheet({
+/**
+ * Name, and one line saying which project and what they do. With a contact
+ * given it edits that one in place — misspellings shouldn't be permanent.
+ */
+function ContactSheet({
   clientId,
+  contact,
   onClose,
 }: {
   clientId: number;
+  contact?: Contact;
   onClose: () => void;
 }) {
   const snapshot = useSnapshot();
   const { act } = useStore();
-  const [name, setName] = useState("");
-  const [detail, setDetail] = useState("");
+  const [name, setName] = useState(contact?.name ?? "");
+  const [detail, setDetail] = useState(contact?.role ?? "");
   const projects = projectsOf(snapshot, clientId);
-  const [projectId, setProjectId] = useState<number | null>(null);
+  const [projectId, setProjectId] = useState<number | null>(contact?.projectId ?? null);
 
   const save = () => {
     if (!name.trim()) return;
     void act((db, c) =>
-      contactRepo.create(db, c, {
-        clientId,
-        projectId,
-        name,
-        role: detail.trim() || undefined,
-      }),
+      contact
+        ? contactRepo.edit(db, contact.id, {
+            name,
+            role: detail.trim() || null,
+            projectId,
+          })
+        : contactRepo.create(db, c, {
+            clientId,
+            projectId,
+            name,
+            role: detail.trim() || undefined,
+          }),
     ).then(onClose);
   };
 
@@ -235,7 +258,7 @@ function NewContactSheet({
           if (e.key === "Escape") onClose();
         }}
       >
-        <span className="label text-faint">New contact</span>
+        <span className="label text-faint">{contact ? "Edit contact" : "New contact"}</span>
         <input
           autoFocus
           value={name}
@@ -276,9 +299,11 @@ function NewContactSheet({
             onClick={save}
             className="rounded-lg bg-green px-4 py-2 text-sm text-ink transition-colors hover:bg-green-hover"
           >
-            Add contact
+            {contact ? "Save" : "Add contact"}
           </button>
-          <span className="fact text-[11px] text-faint">⏎ add · esc dismiss</span>
+          <span className="fact text-[11px] text-faint">
+            ⏎ {contact ? "save" : "add"} · esc dismiss
+          </span>
         </div>
       </div>
     </div>

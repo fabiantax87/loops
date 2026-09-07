@@ -191,6 +191,30 @@ export const contacts = {
     return lastInsertId;
   },
 
+  /** Names get misspelled and people change desks; all of it is fixable. */
+  async edit(
+    db: SqlDriver,
+    id: number,
+    fields: { name?: string; role?: string | null; projectId?: number | null },
+  ): Promise<void> {
+    const sets: string[] = [];
+    const params: unknown[] = [];
+    if (fields.name !== undefined) {
+      sets.push("name = ?");
+      params.push(fields.name.trim());
+    }
+    if (fields.role !== undefined) {
+      sets.push("role = ?");
+      params.push(fields.role?.trim() || null);
+    }
+    if (fields.projectId !== undefined) {
+      sets.push("project_id = ?");
+      params.push(fields.projectId);
+    }
+    if (sets.length === 0) return;
+    await db.execute(`UPDATE contacts SET ${sets.join(", ")} WHERE id = ?`, [...params, id]);
+  },
+
   /** People leave. Their name stops mattering, so it goes. */
   async remove(db: SqlDriver, id: number): Promise<void> {
     await db.execute("DELETE FROM contacts WHERE id = ?", [id]);
