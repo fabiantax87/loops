@@ -1,5 +1,5 @@
 import type { Clock } from "../lib/clock";
-import { type Day, dayStart, daysBetween, today } from "../lib/time";
+import { type Day, dayStart, daysBetween, localTime, today } from "../lib/time";
 import { attribution, contactById, openItems, type Snapshot } from "./snapshot";
 import type { Item } from "./types";
 import { countOf, plural, sentences, spell, spellCapitalised } from "./words";
@@ -136,15 +136,29 @@ export function dueTodayTodos(snapshot: Snapshot, clock: Clock): TodoRow[] {
 function chaseFact(item: Item, now: Day): TimeFact {
   const day = item.checkinOn as Day;
   return day === now
-    ? { text: "check-in today", tone: "amber" }
+    ? {
+        text: item.checkinTime ? `check-in today · ${item.checkinTime}` : "check-in today",
+        tone: "amber",
+      }
     : { text: `check-in was ${recentDayName(day, now)}`, tone: "amber" };
 }
 
-/** Waiting-ons whose check-in day has arrived with nothing recorded since. */
+/**
+ * Waiting-ons whose check-in moment has arrived with nothing recorded since.
+ * A check-in with a time on today's date isn't due until that time — "at
+ * 15:00" should not read as passed over breakfast.
+ */
 export function chaseDue(snapshot: Snapshot, clock: Clock): ChaseRow[] {
   const now = today(clock);
+  const clockTime = localTime(clock);
   return openItems(snapshot)
-    .filter((i) => i.kind === "waiting" && i.checkinOn !== null && i.checkinOn <= now)
+    .filter(
+      (i) =>
+        i.kind === "waiting" &&
+        i.checkinOn !== null &&
+        (i.checkinOn < now ||
+          (i.checkinOn === now && (i.checkinTime === null || i.checkinTime <= clockTime))),
+    )
     .map((item) => {
       const asked = item.lastChasedOn ?? item.sentOn;
       const notes: string[] = [];

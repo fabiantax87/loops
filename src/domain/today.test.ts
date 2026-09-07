@@ -145,6 +145,28 @@ describe("time to chase", () => {
     expect(due[0].fact).toEqual({ text: "check-in today", tone: "amber" });
   });
 
+  it("a timed check-in today waits for its moment", async () => {
+    await items.create(db, clock, {
+      clientId: euro,
+      kind: "waiting",
+      title: "Sanne after the 15:00 call",
+      checkinOn: today(clock),
+      checkinTime: "15:00",
+    });
+
+    // 09:00 — the day has arrived but the moment hasn't.
+    expect(chaseDue(await snapshot(), clock)).toHaveLength(0);
+
+    clock.advance({ hours: 6 });
+    const due = chaseDue(await snapshot(), clock);
+    expect(due).toHaveLength(1);
+    expect(due[0].fact).toEqual({ text: "check-in today · 15:00", tone: "amber" });
+
+    // A day later the time no longer gates anything.
+    clock.advance({ days: 1, hours: -8 });
+    expect(chaseDue(await snapshot(), clock)).toHaveLength(1);
+  });
+
   it("a waiting-on with no check-in never surfaces on its own", async () => {
     await items.create(db, clock, {
       clientId: euro,

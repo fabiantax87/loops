@@ -34,6 +34,12 @@ export function today(clock: Clock): Day {
   return toDay(clock.now());
 }
 
+/** Local 'HH:MM' right now — comparable to a stored time-of-day string. */
+export function localTime(clock: Clock): string {
+  const now = clock.now();
+  return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+}
+
 /** Local midnight at the start of a day. */
 export function dayStart(day: Day): Date {
   const [y, m, d] = day.split("-").map(Number);

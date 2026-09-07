@@ -86,7 +86,13 @@ export function buildClientPage(
       fact = due
         ? { text: "check-in passed", tone: "amber" }
         : item.checkinOn
-          ? { text: `check in ${niceDay(item.checkinOn)}`, tone: "grey" }
+          ? {
+              text:
+                item.checkinOn === now
+                  ? `check in today${item.checkinTime ? ` · ${item.checkinTime}` : ""}`
+                  : `check in ${niceDay(item.checkinOn)}`,
+              tone: "grey",
+            }
           : { text: "no check-in", tone: "grey" };
     } else if (item.ideaSince) {
       fact = { text: `noted ${noteDay(item.ideaSince)}`, tone: "grey" };

@@ -3,7 +3,7 @@ import { meta } from "../db/repo";
 import { chaseDue, criticalTodos, dueTodayTodos } from "../domain/today";
 import type { Snapshot } from "../domain/snapshot";
 import type { Clock } from "../lib/clock";
-import { today } from "../lib/time";
+import { localTime, today } from "../lib/time";
 import { useClock } from "../lib/ClockContext";
 import { useStore } from "./store";
 
@@ -69,12 +69,6 @@ export function useHotWatch(snapshot: Snapshot): void {
   }, [snapshot, clock, act, loading, minute]);
 }
 
-/** Local 'HH:MM' right now, comparable to the stored times. */
-function timeNow(clock: Clock): string {
-  const now = clock.now();
-  return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-}
-
 /** The persisted set of things already said, loaded once per app run. */
 async function loadAnnounced(
   announced: { current: Set<string> | null },
@@ -109,7 +103,7 @@ async function announceDeadlineTimes(
   act: ReturnType<typeof useStore>["act"],
 ): Promise<void> {
   const day = today(clock);
-  const now = timeNow(clock);
+  const now = localTime(clock);
   const due = snapshot.items.filter(
     (item) =>
       item.status === "open" &&
@@ -139,11 +133,9 @@ async function announceCheckins(
   announced: { current: Set<string> | null },
   act: ReturnType<typeof useStore>["act"],
 ): Promise<void> {
-  const now = timeNow(clock);
-  // A check-in with a time holds its tongue until that moment arrives.
-  const due = chaseDue(snapshot, clock).filter(
-    (r) => r.item.checkinTime === null || r.item.checkinTime <= now,
-  );
+  // chaseDue already waits for a timed check-in's moment, so notifying on what
+  // it returns keeps the notification and the amber rows in step.
+  const due = chaseDue(snapshot, clock);
   if (due.length === 0) return;
 
   const seen = await loadAnnounced(announced, act);
