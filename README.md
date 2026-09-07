@@ -94,6 +94,25 @@ magick -size 256x256 xc:none -draw @assets/tray.mvg - |
 The menu-bar mark is separate and flat black: macOS treats it as a template
 image, tinting the alpha to match the bar, so colour there would be thrown away.
 
+## Releasing
+
+The installed app updates itself from GitHub Releases: it checks
+`releases/latest/download/latest.json` at startup (and every few hours),
+downloads in the background, and offers a restart in the title bar. To ship:
+
+```sh
+pnpm bump 0.2.0        # writes the version into package.json + tauri.conf.json
+git add -A && git commit -m "v0.2.0"
+git tag v0.2.0 && git push && git push --tags
+```
+
+The `Release` workflow builds on a macOS runner, signs the update artifacts,
+and publishes the release. It needs one repository secret,
+`TAURI_SIGNING_PRIVATE_KEY` — the contents of `~/.tauri/loops.key` (no
+password). The matching public key lives in `tauri.conf.json`; losing the
+private key means shipped apps can never verify another update, so keep a copy
+somewhere safe.
+
 ## Adding a migration
 
 Write `src-tauri/migrations/000N_*.sql`, then register it in both runners:

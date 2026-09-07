@@ -3,6 +3,7 @@ import type { SqlDriver } from "./db/driver";
 import { openDb } from "./db/tauri";
 import { systemClock } from "./lib/clock";
 import { StoreProvider, useSnapshot, useStore } from "./state/store";
+import { useUpdater } from "./state/updater";
 import { useHotWatch } from "./state/watch";
 import { Capture, type CapturePreset } from "./ui/Capture";
 import { TitleBar } from "./ui/Chrome";
@@ -22,6 +23,7 @@ function Workspace() {
   const snapshot = useSnapshot();
   const { loading } = useStore();
   useHotWatch(snapshot);
+  const { update, restart } = useUpdater();
 
   // ⌘⇧L reaches the window from anywhere; inside the app the same chord works
   // without asking the OS.
@@ -49,7 +51,17 @@ function Workspace() {
 
   return (
     <div className="flex h-full flex-col bg-panel">
-      <TitleBar />
+      <TitleBar>
+        {update.phase === "ready" && (
+          <button
+            type="button"
+            onClick={restart}
+            className="fact rounded-[5px] border border-[#244f3f] px-[9px] py-[3px] text-[11px] text-green transition-colors hover:bg-green hover:text-ink"
+          >
+            {update.version} is ready — restart
+          </button>
+        )}
+      </TitleBar>
       <div className="flex min-h-0 flex-1">
         <Rail screen={screen} go={setScreen} onNewClient={() => setNaming(true)} />
         {/* items-start matters: as a stretched flex item the reading column

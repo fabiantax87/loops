@@ -35,6 +35,15 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDFBMzIyM0JBM0QxODFFRApSV1R0Z2RHak95S2pBVlN5Lzd6U3o3N2NzeDh5LzI0VFFKT05zWDhKckU2dlZEVXZ2bDBUbXVNZwo=",
+      "endpoints": [
+        "https://github.com/fabiantax87/loops/releases/latest/download/latest.json"
+      ]
+    }
   }
 }

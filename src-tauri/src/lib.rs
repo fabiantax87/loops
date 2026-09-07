@@ -125,6 +125,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_process::init())
         .invoke_handler(tauri::generate_handler![set_tray_badge])
         .plugin(
             tauri_plugin_sql::Builder::default()
@@ -134,6 +135,10 @@ pub fn run() {
         .setup(|app| {
             #[cfg(desktop)]
             {
+                // Updates come from GitHub Releases; the frontend checks at
+                // startup and offers a restart when one is ready.
+                app.handle()
+                    .plugin(tauri_plugin_updater::Builder::new().build())?;
                 register_capture_shortcut(app.handle())?;
                 build_tray(app.handle())?;
             }
