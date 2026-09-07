@@ -3,7 +3,7 @@ import { fixedClock } from "../lib/clock";
 import type { Snapshot } from "./snapshot";
 import { emptySnapshot } from "./snapshot";
 import type { Client, Contact, Item, Project } from "./types";
-import { parseCapture, parseDate, titleFrom } from "./capture";
+import { parseCapture, parseDate, parseTime, titleFrom } from "./capture";
 
 /** Thursday 3 September 2026, 09:00 local. */
 const clock = fixedClock(new Date(2026, 8, 3, 9, 0));
@@ -73,6 +73,31 @@ describe("dates in a sentence", () => {
   });
 });
 
+describe("times in a sentence", () => {
+  it.each([
+    ["call them at 15:00", "15:00"],
+    ["demo tomorrow at 3pm", "15:00"],
+    ["standup by 9", "09:00"],
+    ["lunch at noon", "12:00"],
+    ["review 9:30", "09:30"],
+    ["flight at 12am", "00:00"],
+  ])("%s → %s", (text, time) => {
+    expect(parseTime(text)?.time).toBe(time);
+  });
+
+  it("leaves bare counts alone — 3 invoices is not 3 o'clock", () => {
+    expect(parseTime("send 3 invoices")).toBeNull();
+    expect(parseTime("chase in 3 days")).toBeNull();
+  });
+
+  it("rides along in parseCapture and leaves the title clean", () => {
+    const guess = parseCapture("send Sanne the agreement tomorrow at 15:00", world(), clock);
+    expect(guess.date?.day).toBe("2026-09-04");
+    expect(guess.time?.time).toBe("15:00");
+    expect(guess.title).toBe("Send Sanne the agreement");
+  });
+});
+
 describe("routing by name", () => {
   it("files a contact's name under their client and project", () => {
     const guess = parseCapture("send Sanne the data-sharing agreement", world(), clock);
@@ -122,10 +147,12 @@ describe("routing by name", () => {
       kind: "todo",
       title: "Plan the staging migration",
       deadline: "2026-09-10",
+      deadlineTime: null,
       ideaSince: null,
       startedOn: null,
       sentOn: null,
       checkinOn: null,
+      checkinTime: null,
       lastChasedOn: null,
       chaseCount: 0,
       status: "open",

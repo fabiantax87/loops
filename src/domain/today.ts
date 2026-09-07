@@ -101,7 +101,10 @@ function todoRow(snapshot: Snapshot, item: Item, now: Day): TodoRow {
           text: `due ${recentDayName(item.deadline as Day, now)} · ${countOf(lateBy, "day")} ago`,
           tone: "red",
         }
-      : { text: "today", tone: "grey" };
+      : {
+          text: item.deadlineTime ? `today · ${item.deadlineTime}` : "today",
+          tone: "grey",
+        };
   return { item, where, lateBy, promoted, fact };
 }
 

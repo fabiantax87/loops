@@ -51,10 +51,12 @@ function item(r: Row): Item {
     kind: r.kind,
     title: r.title,
     deadline: r.deadline,
+    deadlineTime: r.deadline_time,
     ideaSince: r.idea_since,
     startedOn: r.started_on,
     sentOn: r.sent_on,
     checkinOn: r.checkin_on,
+    checkinTime: r.checkin_time,
     lastChasedOn: r.last_chased_on,
     chaseCount: r.chase_count,
     status: r.status,
@@ -203,8 +205,12 @@ export interface NewItem {
   title: string;
   /** Required for a todo — capture enforces it before it gets here. */
   deadline?: Day | null;
+  /** Local 'HH:MM' on the deadline day, for a reminder at that moment. */
+  deadlineTime?: string | null;
   /** waiting only: when to go asking. */
   checkinOn?: Day | null;
+  /** Local 'HH:MM' on the check-in day; the nudge waits for it. */
+  checkinTime?: string | null;
 }
 
 /** How long a chase is willing to wait when the original window is unusable. */
@@ -219,9 +225,9 @@ export const items = {
     }
     const { lastInsertId } = await db.execute(
       `INSERT INTO items
-         (client_id, project_id, contact_id, kind, title, deadline, idea_since,
-          sent_on, checkin_on, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (client_id, project_id, contact_id, kind, title, deadline, deadline_time,
+          idea_since, sent_on, checkin_on, checkin_time, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         input.clientId,
         input.projectId ?? null,
@@ -229,9 +235,11 @@ export const items = {
         input.kind,
         input.title.trim(),
         input.kind === "todo" ? input.deadline : null,
+        input.kind === "todo" ? (input.deadlineTime ?? null) : null,
         input.kind === "idea" ? day : null,
         input.kind === "waiting" ? day : null,
         input.kind === "waiting" ? (input.checkinOn ?? null) : null,
+        input.kind === "waiting" ? (input.checkinTime ?? null) : null,
         at,
         at,
       ],

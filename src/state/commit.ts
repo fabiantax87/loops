@@ -14,8 +14,12 @@ export interface CaptureDraft {
   contactId: number | null;
   /** Required when kind is "todo"; the bar refuses to save without it. */
   deadline: Day | null;
+  /** Local 'HH:MM' on the deadline day — a reminder fires at that moment. */
+  deadlineTime: string | null;
   /** waiting only, and only if you asked for one. */
   checkinOn: Day | null;
+  /** Local 'HH:MM' on the check-in day; the nudge waits for it. */
+  checkinTime: string | null;
 }
 
 /** Turning the capture bar's state into a row. */
@@ -31,7 +35,9 @@ export async function commitCapture(draft: CaptureDraft, act: Act): Promise<bool
       kind: draft.kind,
       title: draft.title,
       deadline: draft.deadline,
+      deadlineTime: draft.deadlineTime,
       checkinOn: draft.checkinOn,
+      checkinTime: draft.checkinTime,
     }),
   );
   return true;

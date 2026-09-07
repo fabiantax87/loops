@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { parseCapture, parseDate, type CaptureGuess } from "../domain/capture";
+import { parseCapture, parseDate, parseTime, type CaptureGuess } from "../domain/capture";
 import { niceDay } from "../domain/today";
 import { projectsOf } from "../domain/snapshot";
 import type { Client, ItemKind, Project } from "../domain/types";
@@ -104,6 +104,7 @@ export function Capture({
   const [text, setText] = useState("");
   const [overrides, setOverrides] = useState<Partial<CaptureGuess>>({});
   const [dateText, setDateText] = useState("");
+  const [pickingProject, setPickingProject] = useState(false);
   const [reproach, setReproach] = useState<string | null>(null);
   const field = useRef<HTMLInputElement>(null);
 
@@ -126,17 +127,20 @@ export function Capture({
   useEffect(() => {
     setOverrides({});
     setReproach(null);
+    setPickingProject(false);
   }, [text]);
 
   // The date: an explicit entry in the field wins; failing that, whatever the
-  // sentence said.
+  // sentence said. The field takes a time too — "mon 15:00", "fri 3pm".
   const typedDate =
     dateText.trim() === ""
       ? null
-      : /^\d{4}-\d{2}-\d{2}$/.test(dateText.trim())
-        ? { day: dateText.trim() as Day, phrase: dateText.trim() }
+      : /^\d{4}-\d{2}-\d{2}$/.test(dateText.trim().split(/\s+/)[0])
+        ? { day: dateText.trim().split(/\s+/)[0] as Day, phrase: dateText.trim() }
         : parseDate(dateText, clock);
+  const typedTime = dateText.trim() === "" ? null : parseTime(dateText);
   const effectiveDay: Day | null = typedDate?.day ?? guess.date?.day ?? null;
+  const effectiveTime: string | null = typedTime?.time ?? guess.time?.time ?? null;
 
   const set = (patch: Partial<CaptureGuess>) =>
     setOverrides((current) => ({ ...current, ...patch }));
@@ -168,7 +172,9 @@ export function Capture({
         projectId: guess.project?.id ?? null,
         contactId: guess.contact?.id ?? null,
         deadline: kind === "todo" ? effectiveDay : null,
+        deadlineTime: kind === "todo" ? effectiveTime : null,
         checkinOn: kind === "waiting" ? effectiveDay : null,
+        checkinTime: kind === "waiting" && effectiveDay ? effectiveTime : null,
       },
       act,
     ).then((saved) => {
@@ -296,7 +302,37 @@ export function Capture({
                     </Chip>
                   ))
               )}
-              {guess.client && guess.project && <Chip>{guess.project.name}</Chip>}
+              {guess.client && guess.project && !pickingProject && (
+                // Inferred, not gospel — click it to point the item elsewhere.
+                <Chip hint="⌄" onClick={() => setPickingProject(true)}>
+                  {guess.project.name}
+                </Chip>
+              )}
+              {guess.client && guess.project && pickingProject && (
+                <>
+                  {liveProjects(guess.client.id).map((project) => (
+                    <Chip
+                      key={project.id}
+                      selected={project.id === guess.project?.id}
+                      onClick={() => {
+                        set({ project });
+                        setPickingProject(false);
+                      }}
+                    >
+                      {project.name}
+                    </Chip>
+                  ))}
+                  <Chip
+                    selected={false}
+                    onClick={() => {
+                      set({ project: null });
+                      setPickingProject(false);
+                    }}
+                  >
+                    no project
+                  </Chip>
+                </>
+              )}
               {guess.client && !guess.project &&
                 liveProjects(guess.client.id).length > 0 &&
                 liveProjects(guess.client.id).map((project) => (
@@ -325,11 +361,14 @@ export function Capture({
                       save();
                     }
                   }}
-                  placeholder={guess.date ? guess.date.phrase : "mon · in 3 days · 12 sep"}
+                  placeholder={guess.date ? guess.date.phrase : "mon · fri 15:00 · in 3 days"}
                   className="w-44 rounded-md border border-outline-hover bg-[#212624] px-3 py-1.5 text-[14px] text-text outline-none placeholder:text-faint"
                 />
                 {effectiveDay ? (
-                  <span className="fact text-[12px] text-text">{niceDay(effectiveDay)}</span>
+                  <span className="fact text-[12px] text-text">
+                    {niceDay(effectiveDay)}
+                    {effectiveTime && ` · ${effectiveTime}`}
+                  </span>
                 ) : dateText.trim() !== "" ? (
                   <span className="fact text-[11px] text-faint">?</span>
                 ) : null}

@@ -58,6 +58,8 @@ export interface Item {
   title: string;
   /** todo: the day it is owed. Null only on a todo picked up from an idea. */
   deadline: Day | null;
+  /** Local 'HH:MM' on the deadline day, when a moment matters — reminder only. */
+  deadlineTime: string | null;
   /** The day it was first an idea. Survives promotion and demotion. */
   ideaSince: Day | null;
   /** The day it was picked up. On an idea it means "was in progress". */
@@ -66,6 +68,8 @@ export interface Item {
   sentOn: Day | null;
   /** waiting: when to go asking, if ever. */
   checkinOn: Day | null;
+  /** Local 'HH:MM' on the check-in day; the nudge waits for it. */
+  checkinTime: string | null;
   lastChasedOn: Day | null;
   chaseCount: number;
   status: ItemStatus;

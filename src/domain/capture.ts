@@ -25,6 +25,8 @@ export interface CaptureGuess {
   ambiguous: { name: string; candidates: ContactCandidate[] } | null;
   /** A date lifted from the sentence — deadline or check-in, depending on type. */
   date: DateGuess | null;
+  /** A time of day lifted from the sentence — "at 15:00", "by 3pm". */
+  time: TimeGuess | null;
 }
 
 const WEEKDAYS: Record<string, number> = {
@@ -69,6 +71,47 @@ function wordToNumber(word: string): number {
 export interface DateGuess {
   day: Day;
   phrase: string;
+}
+
+export interface TimeGuess {
+  /** Local 'HH:MM'. */
+  time: string;
+  phrase: string;
+}
+
+/**
+ * A moment on the day: "15:00", "at 3pm", "noon". Shallow like the date
+ * parser — a bare hour needs "at"/"by" or an am/pm so that "send 3 invoices"
+ * stays a sentence about invoices.
+ */
+export function parseTime(text: string): TimeGuess | null {
+  const lower = ` ${text.toLowerCase()} `;
+
+  const named = lower.match(/\b(noon|midday)\b/);
+  if (named) return { time: "12:00", phrase: named[1] };
+
+  const clocklike = lower.match(/\b(?:(at|by|before|around) )?(\d{1,2}):(\d{2})\s*(am|pm)?\b/);
+  const bare = lower.match(/\b(?:(at|by|before|around) )(\d{1,2})\s*(am|pm)?\b/);
+  const ampmOnly = lower.match(/\b(\d{1,2})\s*(am|pm)\b/);
+
+  const pick = clocklike
+    ? { hour: Number(clocklike[2]), minute: Number(clocklike[3]), ampm: clocklike[4], phrase: clocklike[0] }
+    : bare
+      ? { hour: Number(bare[2]), minute: 0, ampm: bare[3], phrase: bare[0] }
+      : ampmOnly
+        ? { hour: Number(ampmOnly[1]), minute: 0, ampm: ampmOnly[2], phrase: ampmOnly[0] }
+        : null;
+  if (!pick) return null;
+
+  let hour = pick.hour;
+  if (pick.ampm === "pm" && hour < 12) hour += 12;
+  if (pick.ampm === "am" && hour === 12) hour = 0;
+  if (hour > 23 || pick.minute > 59) return null;
+
+  return {
+    time: `${String(hour).padStart(2, "0")}:${String(pick.minute).padStart(2, "0")}`,
+    phrase: pick.phrase.trim(),
+  };
 }
 
 /** The next time that weekday comes round; today counts as itself. */
@@ -327,10 +370,17 @@ export function matchProject(
 }
 
 /** Strip the cues out of the sentence and leave something worth reading. */
-export function titleFrom(text: string, date: DateGuess | null): string {
+export function titleFrom(
+  text: string,
+  date: DateGuess | null,
+  time: TimeGuess | null = null,
+): string {
   let title = text.trim();
   if (date) {
     title = title.replace(new RegExp(`\\b(by|on|before|until)?\\s*${date.phrase}\\b`, "i"), "");
+  }
+  if (time) {
+    title = title.replace(new RegExp(`\\b(by|at|before|around)?\\s*${time.phrase}\\b`, "i"), "");
   }
   title = title
     .replace(/^\s*(waiting on|waiting for|waiting|still waiting on)\s+/i, "")
@@ -348,6 +398,7 @@ export function parseCapture(
   clock: Clock,
 ): CaptureGuess {
   const date = parseDate(text, clock);
+  const time = parseTime(text);
   const { guess: clientGuess, ambiguous } = identify(text, snapshot);
   const named = clientGuess ? matchProject(text, snapshot, clientGuess.client.id) : null;
   // Failing a name in the sentence, the project the giveaway word usually keeps.
@@ -357,12 +408,13 @@ export function parseCapture(
       : null;
 
   return {
-    title: titleFrom(text, date),
+    title: titleFrom(text, date, time),
     client: clientGuess?.client ?? null,
     clientVia: clientGuess?.via ?? null,
     project: named ?? implied,
     contact: clientGuess?.contact ?? null,
     ambiguous,
     date,
+    time,
   };
 }
