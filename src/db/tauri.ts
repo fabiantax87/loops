@@ -1,8 +1,12 @@
 import Database from "@tauri-apps/plugin-sql";
 import type { ExecuteResult, SqlDriver } from "./driver";
 
-/** Must match `DB_URL` in `src-tauri/src/lib.rs`. */
-export const DB_URL = "sqlite:loops.db";
+/**
+ * Which database this build opens — `tauri dev` serves the Vite dev build and
+ * gets its own file, so unreleased migrations can never strand the installed
+ * app. Both URLs have migrations registered in `src-tauri/src/lib.rs`.
+ */
+export const DB_URL = import.meta.env.DEV ? "sqlite:loops-dev.db" : "sqlite:loops.db";
 
 class TauriDriver implements SqlDriver {
   constructor(private readonly db: Database) {}

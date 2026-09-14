@@ -4,6 +4,10 @@ use tauri_plugin_sql::{Migration, MigrationKind};
 /// this lands next to the app's own config — all local, no network.
 pub const DB_URL: &str = "sqlite:loops.db";
 
+/// Dev builds work against their own file so an unreleased migration can never
+/// strand the installed app (`src/db/tauri.ts` picks by build mode).
+pub const DEV_DB_URL: &str = "sqlite:loops-dev.db";
+
 /// Migrations are numbered and never edited once shipped; the SQL lives in
 /// `migrations/` so the TypeScript test harness can run the exact same files.
 fn migrations() -> Vec<Migration> {
@@ -213,6 +217,13 @@ fn register_capture_shortcut(app: &tauri::AppHandle) -> Result<(), Box<dyn std::
             .build(),
     )?;
 
+    // A dev build often runs while the installed app already owns ⌘⇧L;
+    // losing the shortcut is fine there, dying on startup is not.
+    #[cfg(debug_assertions)]
+    if let Err(e) = app.global_shortcut().register(capture) {
+        eprintln!("capture shortcut unavailable (installed app holds it?): {e}");
+    }
+    #[cfg(not(debug_assertions))]
     app.global_shortcut().register(capture)?;
     Ok(())
 }
@@ -232,8 +243,11 @@ pub fn run() {
             secret_delete
         ])
         .plugin(
+            // Both databases know the same migrations; only the one the
+            // frontend actually loads gets touched.
             tauri_plugin_sql::Builder::default()
                 .add_migrations(DB_URL, migrations())
+                .add_migrations(DEV_DB_URL, migrations())
                 .build(),
         )
         .on_window_event(|window, event| {

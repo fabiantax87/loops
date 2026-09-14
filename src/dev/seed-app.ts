@@ -6,17 +6,19 @@ import { systemClock } from "../lib/clock.ts";
 import { seed } from "./seed.ts";
 
 /**
- * Fills the real app database with the demo history, so the packaged app can be
+ * Fills the dev database with the demo history, so `pnpm tauri dev` can be
  * walked through with something believable in it. Run with `pnpm seed`.
  *
  * It refuses to touch a database that already has clients in it, unless you
  * pass --reset, which empties every table first. That flag throws away real
  * data, so it has to be asked for by name.
  */
+// The dev database — the packaged app's loops.db holds real client work now,
+// so demo data has no business there.
 const DB_PATHS: Record<string, string> = {
-  darwin: join(homedir(), "Library", "Application Support", "com.fabiantax.loops", "loops.db"),
-  linux: join(homedir(), ".config", "com.fabiantax.loops", "loops.db"),
-  win32: join(homedir(), "AppData", "Roaming", "com.fabiantax.loops", "loops.db"),
+  darwin: join(homedir(), "Library", "Application Support", "com.fabiantax.loops", "loops-dev.db"),
+  linux: join(homedir(), ".config", "com.fabiantax.loops", "loops-dev.db"),
+  win32: join(homedir(), "AppData", "Roaming", "com.fabiantax.loops", "loops-dev.db"),
 };
 
 class NodeDriver implements SqlDriver {
