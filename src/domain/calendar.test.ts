@@ -362,6 +362,7 @@ describe("rescheduleWrite", () => {
     kind: "task",
     late: false,
     where: "",
+    whereShort: "",
   });
 
   it("leaves the duration alone when a block is only moved", () => {

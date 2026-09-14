@@ -51,7 +51,7 @@ function TaskLine({ task }: { task: TaskEntry }) {
       {task.kind === "checkin" && (
         <span className="fact text-[11px] text-amber">check-in</span>
       )}
-      <span className="fact truncate text-[11px] text-faint">{task.where}</span>
+      <span className="fact truncate text-[11px] text-faint">{task.whereShort}</span>
     </div>
   );
 }

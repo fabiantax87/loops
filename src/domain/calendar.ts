@@ -59,7 +59,14 @@ export interface TaskEntry {
   kind: "task" | "checkin";
   /** Its day is behind us and it is still open — the only red on the grid. */
   late: boolean;
+  /** "Eurotransplant · Corporate · Sanne de Vries" */
   where: string;
+  /**
+   * The same line without the client. Project names tend to carry the client
+   * in them already, so saying both reads as a stutter where there is room to
+   * spell the project out in full.
+   */
+  whereShort: string;
 }
 
 export type BlockContent =
@@ -172,6 +179,7 @@ export function tasksForDay(
       kind: item.kind === "waiting" ? "checkin" : "task",
       late,
       where: attribution(snapshot, item),
+      whereShort: attribution(snapshot, item, { client: false }),
     });
   }
   // Late first, then by their moment, then by age — a stable read.
