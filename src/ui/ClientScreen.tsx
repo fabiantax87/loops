@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { contacts as contactRepo } from "../db/repo";
+import { clients as clientRepo, contacts as contactRepo } from "../db/repo";
 import { buildClientPage, shortProjectName } from "../domain/clientPage";
-import { projectById, projectsOf } from "../domain/snapshot";
+import { clientById, projectById, projectsOf } from "../domain/snapshot";
 import type { Contact, ItemKind } from "../domain/types";
 import { useClock } from "../lib/ClockContext";
 import { useSnapshot, useStore } from "../state/store";
-import { BandLabel } from "./primitives";
+import { BandLabel, RowMenu } from "./primitives";
 import { CriticalRow, IdeaRow, TodoRow, WaitingRow } from "./rows";
 
 const DOT: Record<string, string> = {
@@ -31,18 +31,32 @@ export function ClientScreen({
   const clock = useClock();
   const { act } = useStore();
   const model = buildClientPage(snapshot, clock, clientId);
+  const client = clientById(snapshot, clientId);
   const [addingContact, setAddingContact] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
 
   return (
     <div className="flex w-[720px] flex-col gap-[52px] pt-14 pb-[72px]">
-      <header className="flex flex-col gap-3">
-        <h1 className="m-0 text-[30px] font-semibold tracking-[-.015em] text-text">
-          {model.name}
-        </h1>
-        <p className="m-0 max-w-[600px] text-[17px] leading-relaxed text-pretty text-muted">
-          {model.summary}
-        </p>
+      <header className="flex items-start gap-4">
+        <div className="flex flex-1 flex-col gap-3">
+          <h1 className="m-0 text-[30px] font-semibold tracking-[-.015em] text-text">
+            {model.name}
+          </h1>
+          <p className="m-0 max-w-[600px] text-[17px] leading-relaxed text-pretty text-muted">
+            {model.summary}
+          </p>
+        </div>
+        {client && (
+          <RowMenu
+            items={[
+              {
+                label: client.leading ? "I'm not leading this" : "I'm leading this",
+                onSelect: () =>
+                  act((db) => clientRepo.setLeading(db, client.id, !client.leading)),
+              },
+            ]}
+          />
+        )}
       </header>
 
       <div className="flex gap-14">

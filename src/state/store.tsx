@@ -27,6 +27,11 @@ interface Store {
   act: (write: (db: SqlDriver, clock: Clock) => Promise<unknown>) => Promise<void>;
   reload: () => Promise<void>;
   loading: boolean;
+  /**
+   * For reads that live outside the snapshot — the Google Calendar cache,
+   * which is borrowed data on its own refresh cycle, not app state.
+   */
+  db: SqlDriver;
 }
 
 const StoreContext = createContext<Store | null>(null);
@@ -71,8 +76,8 @@ export function StoreProvider({
   }, [reload]);
 
   const value = useMemo<Store>(
-    () => ({ snapshot, act, reload, loading }),
-    [snapshot, act, reload, loading],
+    () => ({ snapshot, act, reload, loading, db }),
+    [snapshot, act, reload, loading, db],
   );
 
   return (

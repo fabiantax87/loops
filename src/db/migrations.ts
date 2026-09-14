@@ -5,6 +5,8 @@ import rapport0004 from "../../src-tauri/migrations/0004_contact_rapport.sql?raw
 import items0005 from "../../src-tauri/migrations/0005_items.sql?raw";
 import timeOfDay0006 from "../../src-tauri/migrations/0006_time_of_day.sql?raw";
 import itemNotes0007 from "../../src-tauri/migrations/0007_item_notes.sql?raw";
+import calendar0008 from "../../src-tauri/migrations/0008_calendar.sql?raw";
+import leading0009 from "../../src-tauri/migrations/0009_leading_clients.sql?raw";
 import type { SqlDriver } from "./driver";
 
 export interface Migration {
@@ -27,6 +29,8 @@ export const MIGRATIONS: Migration[] = [
   { version: 5, name: "loops become items — todo, idea, waiting", sql: items0005 },
   { version: 6, name: "deadlines and check-ins learn a time of day", sql: timeOfDay0006 },
   { version: 7, name: "items learn notes", sql: itemNotes0007 },
+  { version: 8, name: "task durations and the Google Calendar cache", sql: calendar0008 },
+  { version: 9, name: "clients you lead", sql: leading0009 },
 ];
 
 export async function applyMigrations(driver: SqlDriver): Promise<number[]> {

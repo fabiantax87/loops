@@ -2,14 +2,21 @@ import { describe, expect, it } from "vitest";
 import { ManualClock, fixedClock } from "./clock";
 import {
   addDays,
+  addMonths,
   daysAgo,
   daysBetween,
   endOfDayInstant,
+  instantToDay,
   isDue,
   isDueToday,
   isOverdue,
+  minutesOfDay,
+  monthGrid,
+  startOfMonth,
+  startOfWeek,
   toDay,
   today,
+  weekdays,
 } from "./time";
 
 describe("ManualClock", () => {
@@ -71,5 +78,54 @@ describe("days", () => {
 
   it("counts how long ago something happened", () => {
     expect(daysAgo(new Date(2026, 7, 22, 14, 0).toISOString(), clock)).toBe(6);
+  });
+});
+
+describe("calendar helpers", () => {
+  it("reads a time of day as minutes", () => {
+    expect(minutesOfDay("00:00")).toBe(0);
+    expect(minutesOfDay("09:30")).toBe(570);
+    expect(minutesOfDay("23:59")).toBe(1439);
+  });
+
+  it("lands an instant on its local day", () => {
+    expect(instantToDay(new Date(2026, 8, 14, 23, 30).toISOString())).toBe("2026-09-14");
+  });
+
+  it("finds the Monday of any weekday", () => {
+    expect(startOfWeek("2026-09-14")).toBe("2026-09-14"); // a Monday stays put
+    expect(startOfWeek("2026-09-16")).toBe("2026-09-14");
+    expect(startOfWeek("2026-09-20")).toBe("2026-09-14"); // Sunday belongs to the week before
+    expect(startOfWeek("2026-01-01")).toBe("2025-12-29"); // across the year
+  });
+
+  it("hands out the work week", () => {
+    expect(weekdays("2026-09-17")).toEqual([
+      "2026-09-14",
+      "2026-09-15",
+      "2026-09-16",
+      "2026-09-17",
+      "2026-09-18",
+    ]);
+  });
+
+  it("moves by months, clamped to what the month has", () => {
+    expect(startOfMonth("2026-09-14")).toBe("2026-09-01");
+    expect(addMonths("2026-09-14", 1)).toBe("2026-10-14");
+    expect(addMonths("2026-01-31", 1)).toBe("2026-02-28");
+    expect(addMonths("2026-12-15", 1)).toBe("2027-01-15");
+    expect(addMonths("2026-01-15", -1)).toBe("2025-12-15");
+  });
+
+  it("covers a month in Monday-first weeks", () => {
+    const weeks = monthGrid("2026-09-14");
+    expect(weeks[0][0]).toBe("2026-08-31"); // September 2026 starts on a Tuesday
+    expect(weeks.at(-1)![6]).toBe("2026-10-04");
+    expect(weeks).toHaveLength(5);
+    for (const week of weeks) expect(week).toHaveLength(7);
+    // A DST-crossing month keeps its shape (Amsterdam falls back 25 Oct 2026).
+    const october = monthGrid("2026-10-10");
+    expect(october[0][0]).toBe("2026-09-28");
+    expect(october.at(-1)![6]).toBe("2026-11-01");
   });
 });

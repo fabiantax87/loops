@@ -1,7 +1,8 @@
 import type { SqlDriver } from "./driver";
 import type { Clock } from "../lib/clock";
-import { type Day, addDays, daysBetween, nowInstant, toDay, today } from "../lib/time";
+import { type Day, type Instant, addDays, daysBetween, nowInstant, toDay, today } from "../lib/time";
 import type { IdeasOfDay, Snapshot } from "../domain/snapshot";
+import type { Meeting } from "../domain/calendar";
 import type { Client, Contact, Item, ItemKind, Project, ProjectStatus } from "../domain/types";
 
 /* Rows come back snake_case; the app speaks camelCase. The mapping is dull and
@@ -16,6 +17,7 @@ function client(r: Row): Client {
     id: r.id,
     name: r.name,
     notes: r.notes,
+    leading: !!r.leading,
     archivedAt: r.archived_at,
     createdAt: r.created_at,
   };
@@ -53,6 +55,7 @@ function item(r: Row): Item {
     notes: r.notes,
     deadline: r.deadline,
     deadlineTime: r.deadline_time,
+    durationMinutes: r.duration_minutes,
     ideaSince: r.idea_since,
     startedOn: r.started_on,
     sentOn: r.sent_on,
@@ -140,6 +143,11 @@ export const clients = {
 
   async rename(db: SqlDriver, id: number, name: string): Promise<void> {
     await db.execute("UPDATE clients SET name = ? WHERE id = ?", [name.trim(), id]);
+  },
+
+  /** Whether this is a client you lead. The rail gives those their own band. */
+  async setLeading(db: SqlDriver, id: number, leading: boolean): Promise<void> {
+    await db.execute("UPDATE clients SET leading = ? WHERE id = ?", [leading ? 1 : 0, id]);
   },
 
   async archive(db: SqlDriver, clock: Clock, id: number): Promise<void> {
@@ -232,6 +240,8 @@ export interface NewItem {
   deadline?: Day | null;
   /** Local 'HH:MM' on the deadline day, for a reminder at that moment. */
   deadlineTime?: string | null;
+  /** How long it takes, in minutes. Null means the default (30). */
+  durationMinutes?: number | null;
   /** waiting only: when to go asking. */
   checkinOn?: Day | null;
   /** Local 'HH:MM' on the check-in day; the nudge waits for it. */
@@ -251,8 +261,9 @@ export const items = {
     const { lastInsertId } = await db.execute(
       `INSERT INTO items
          (client_id, project_id, contact_id, kind, title, deadline, deadline_time,
-          idea_since, sent_on, checkin_on, checkin_time, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          duration_minutes, idea_since, sent_on, checkin_on, checkin_time,
+          created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         input.clientId,
         input.projectId ?? null,
@@ -261,6 +272,7 @@ export const items = {
         input.title.trim(),
         input.kind === "todo" ? input.deadline : null,
         input.kind === "todo" ? (input.deadlineTime ?? null) : null,
+        input.kind === "todo" ? (input.durationMinutes ?? null) : null,
         input.kind === "idea" ? day : null,
         input.kind === "waiting" ? day : null,
         input.kind === "waiting" ? (input.checkinOn ?? null) : null,
@@ -411,6 +423,48 @@ export const items = {
       [checkinOn, nowInstant(clock), id],
     );
   },
+
+  /** The calendar's editor for a waiting-on: when to chase, and for how long. */
+  async setCheckinSchedule(
+    db: SqlDriver,
+    clock: Clock,
+    id: number,
+    schedule: { checkinOn: Day; checkinTime: string | null; durationMinutes: number | null },
+  ): Promise<void> {
+    await db.execute(
+      `UPDATE items
+         SET checkin_on = ?, checkin_time = ?, duration_minutes = ?, updated_at = ?
+       WHERE id = ?`,
+      [
+        schedule.checkinOn,
+        schedule.checkinTime,
+        schedule.durationMinutes,
+        nowInstant(clock),
+        id,
+      ],
+    );
+  },
+
+  /** The calendar's task editor: day, moment and length in one write. */
+  async setSchedule(
+    db: SqlDriver,
+    clock: Clock,
+    id: number,
+    schedule: { deadline: Day; deadlineTime: string | null; durationMinutes: number | null },
+  ): Promise<void> {
+    await db.execute(
+      `UPDATE items
+         SET deadline = ?, deadline_time = ?, duration_minutes = ?, updated_at = ?
+       WHERE id = ?`,
+      [
+        schedule.deadline,
+        schedule.deadlineTime,
+        schedule.durationMinutes,
+        nowInstant(clock),
+        id,
+      ],
+    );
+  },
 };
 
 /**
@@ -446,6 +500,133 @@ export async function settleIdeasOfDay(db: SqlDriver, clock: Clock): Promise<voi
     JSON.stringify({ day, ids: rows.map((r) => r.id) } satisfies IdeasOfDay),
   );
 }
+
+function meeting(r: Row): Meeting {
+  return {
+    id: r.id,
+    calendarId: r.calendar_id,
+    title: r.title,
+    allDay: r.start_day !== null,
+    start: r.start_at,
+    end: r.end_at,
+    startDay: r.start_day,
+    endDay: r.end_day,
+    location: r.location,
+    description: r.description,
+    attendees: r.attendees ? JSON.parse(r.attendees) : [],
+    meetUrl: r.meet_url,
+    htmlLink: r.html_link,
+    status: r.status,
+  };
+}
+
+/**
+ * The local cache of Google Calendar events. Google owns this data; the cache
+ * exists so the calendar renders instantly and offline, and a sync replaces a
+ * whole window at a time — cancellations simply stop being there.
+ */
+export const googleEvents = {
+  async replaceWindow(
+    db: SqlDriver,
+    clock: Clock,
+    calendarId: string,
+    timeMin: Instant,
+    timeMax: Instant,
+    events: Meeting[],
+  ): Promise<void> {
+    // Days compare against instants here only to bound the delete; the window
+    // is generous enough that an all-day event near its edge cannot be lost
+    // from one window and kept out of the next.
+    await db.execute(
+      `DELETE FROM google_events
+        WHERE calendar_id = ?
+          AND ((start_at IS NOT NULL AND start_at < ? AND end_at > ?)
+            OR (start_day IS NOT NULL AND start_day < ? AND end_day > ?))`,
+      [calendarId, timeMax, timeMin, timeMax.slice(0, 10), timeMin.slice(0, 10)],
+    );
+    for (const event of events) {
+      await db.execute(
+        `INSERT INTO google_events
+           (id, calendar_id, title, start_at, end_at, start_day, end_day,
+            location, description, attendees, meet_url, html_link, status, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (calendar_id, id) DO UPDATE SET
+           title = excluded.title, start_at = excluded.start_at,
+           end_at = excluded.end_at, start_day = excluded.start_day,
+           end_day = excluded.end_day, location = excluded.location,
+           description = excluded.description, attendees = excluded.attendees,
+           meet_url = excluded.meet_url, html_link = excluded.html_link,
+           status = excluded.status, updated_at = excluded.updated_at`,
+        [
+          event.id,
+          calendarId,
+          event.title,
+          event.start,
+          event.end,
+          event.startDay,
+          event.endDay,
+          event.location,
+          event.description,
+          JSON.stringify(event.attendees),
+          event.meetUrl,
+          event.htmlLink,
+          event.status,
+          nowInstant(clock),
+        ],
+      );
+    }
+  },
+
+  /** Every cached event touching the window, enabled calendars only. */
+  async listBetween(db: SqlDriver, timeMin: Instant, timeMax: Instant): Promise<Meeting[]> {
+    const rows = await db.select<Row>(
+      `SELECT e.* FROM google_events e
+        JOIN google_calendars c ON c.id = e.calendar_id
+       WHERE c.enabled = 1
+         AND ((e.start_at IS NOT NULL AND e.start_at < ? AND e.end_at > ?)
+           OR (e.start_day IS NOT NULL AND e.start_day < ? AND e.end_day > ?))
+       ORDER BY coalesce(e.start_at, e.start_day)`,
+      [timeMax, timeMin, timeMax.slice(0, 10), timeMin.slice(0, 10)],
+    );
+    return rows.map(meeting);
+  },
+
+  /** Disconnecting takes the borrowed data with it. */
+  async clear(db: SqlDriver): Promise<void> {
+    await db.execute("DELETE FROM google_events");
+    await db.execute("DELETE FROM google_calendars");
+  },
+};
+
+export interface GoogleCalendar {
+  id: string;
+  summary: string;
+  enabled: boolean;
+}
+
+export const googleCalendars = {
+  async list(db: SqlDriver): Promise<GoogleCalendar[]> {
+    const rows = await db.select<Row>(
+      "SELECT * FROM google_calendars ORDER BY summary COLLATE NOCASE",
+    );
+    return rows.map((r) => ({ id: r.id, summary: r.summary, enabled: r.enabled === 1 }));
+  },
+
+  async upsert(db: SqlDriver, id: string, summary: string): Promise<void> {
+    await db.execute(
+      `INSERT INTO google_calendars (id, summary) VALUES (?, ?)
+       ON CONFLICT (id) DO UPDATE SET summary = excluded.summary`,
+      [id, summary],
+    );
+  },
+
+  async setEnabled(db: SqlDriver, id: string, enabled: boolean): Promise<void> {
+    await db.execute("UPDATE google_calendars SET enabled = ? WHERE id = ?", [
+      enabled ? 1 : 0,
+      id,
+    ]);
+  },
+};
 
 export const meta = {
   async get(db: SqlDriver, key: string): Promise<string | null> {

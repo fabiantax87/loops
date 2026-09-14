@@ -18,6 +18,10 @@ interface SeedItem {
   title: string;
   /** All days are offsets from today: -3 is three days ago. */
   deadline?: number;
+  /** Local 'HH:MM' on the deadline day — puts the todo on the calendar grid. */
+  deadlineTime?: string;
+  /** Minutes the task takes; unset means the default 30. */
+  durationMinutes?: number;
   ideaSince?: number;
   startedOn?: number;
   sentOn?: number;
@@ -31,11 +35,14 @@ interface SeedItem {
 
 const CLIENTS: {
   name: string;
+  /** The ones you run rather than only work for — the rail bands them apart. */
+  leading?: boolean;
   projects: string[];
   contacts: { name: string; project?: string; role?: string }[];
 }[] = [
   {
     name: "Eurotransplant",
+    leading: true,
     projects: ["Eurotransplant Corporate", "Eurotransplant ETRL"],
     contacts: [
       { name: "Sanne de Vries", project: "Eurotransplant ETRL", role: "lead" },
@@ -54,6 +61,7 @@ const CLIENTS: {
   },
   {
     name: "Meridian Health",
+    leading: true,
     projects: ["Portal rebuild"],
     contacts: [{ name: "Marco Ricci", project: "Portal rebuild", role: "lead" }],
   },
@@ -113,7 +121,20 @@ const ITEMS: SeedItem[] = [
     kind: "todo",
     title: "Prepare the Q4 estimate for the portal",
     deadline: 5,
+    deadlineTime: "14:00",
+    durationMinutes: 120,
     createdDaysAgo: 3,
+  },
+  // A timed task today, to sit on the calendar grid beside the meetings.
+  {
+    client: "Studio Ravel",
+    project: "Ravel Rebrand",
+    kind: "todo",
+    title: "Walk through the rebrand deck once more",
+    deadline: 0,
+    deadlineTime: "15:30",
+    durationMinutes: 45,
+    createdDaysAgo: 1,
   },
   // Someone to chase.
   {
@@ -279,8 +300,8 @@ export async function seed(db: SqlDriver, clock: Clock): Promise<void> {
 
   for (const spec of CLIENTS) {
     const { lastInsertId: clientId } = await db.execute(
-      "INSERT INTO clients (name, created_at) VALUES (?, ?)",
-      [spec.name, at(90)],
+      "INSERT INTO clients (name, leading, created_at) VALUES (?, ?, ?)",
+      [spec.name, spec.leading ? 1 : 0, at(90)],
     );
     clientIds.set(spec.name, clientId);
     for (const name of spec.projects) {
@@ -309,10 +330,11 @@ export async function seed(db: SqlDriver, clock: Clock): Promise<void> {
     const created = at(item.createdDaysAgo ?? 7);
     await db.execute(
       `INSERT INTO items
-         (client_id, project_id, contact_id, kind, title, deadline, idea_since,
-          started_on, sent_on, checkin_on, last_chased_on, chase_count,
-          status, outcome, created_at, updated_at, closed_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (client_id, project_id, contact_id, kind, title, deadline, deadline_time,
+          duration_minutes, idea_since, started_on, sent_on, checkin_on,
+          last_chased_on, chase_count, status, outcome, created_at, updated_at,
+          closed_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         clientIds.get(item.client),
         item.project ? (projectIds.get(item.project) ?? null) : null,
@@ -320,6 +342,8 @@ export async function seed(db: SqlDriver, clock: Clock): Promise<void> {
         item.kind,
         item.title,
         day(item.deadline),
+        item.deadlineTime ?? null,
+        item.durationMinutes ?? null,
         day(item.ideaSince),
         day(item.startedOn),
         day(item.sentOn),
@@ -331,6 +355,109 @@ export async function seed(db: SqlDriver, clock: Clock): Promise<void> {
         created,
         item.closed ? at(item.closed.daysAgo) : created,
         item.closed ? at(item.closed.daysAgo) : null,
+      ],
+    );
+  }
+
+  await seedMeetings(db, clock);
+}
+
+/**
+ * A believable week of Google Calendar traffic for the localhost build: the
+ * cache table is filled directly, so the calendar screen has something to
+ * show without an account or a network.
+ */
+async function seedMeetings(db: SqlDriver, clock: Clock): Promise<void> {
+  const now = today(clock);
+  const calendarId = "fabian@linku.nl";
+  await db.execute("INSERT INTO google_calendars (id, summary) VALUES (?, ?)", [
+    calendarId,
+    "fabian@linku.nl",
+  ]);
+
+  const at = (offset: number, hour: number, minute = 0): string =>
+    new Date(dayStart(addDays(now, offset)).getTime() + (hour * 60 + minute) * 60_000)
+      .toISOString();
+
+  interface SeedMeeting {
+    title: string;
+    dayOffset: number;
+    from?: [number, number];
+    to?: [number, number];
+    /** Present means an all-day event lasting this many days. */
+    allDays?: number;
+    location?: string;
+    meet?: boolean;
+    attendees?: string[];
+    description?: string;
+  }
+
+  const MEETINGS: SeedMeeting[] = [
+    // Today reads like the design: three meetings, the first at ten.
+    { title: "Klokgroep standup", dayOffset: 0, from: [10, 0], to: [10, 30], meet: true },
+    {
+      title: "Eurotransplant ETRL steering",
+      dayOffset: 0,
+      from: [11, 0],
+      to: [12, 0],
+      location: "Leiden 2.14",
+      attendees: ["Sanne de Vries", "Wende Prins"],
+      description: "Quarterly steering — agenda:\nhttps://docs.example.com/etrl-steering",
+    },
+    { title: "Northlight design-system check-in", dayOffset: 0, from: [14, 0], to: [14, 45], meet: true },
+    // Tomorrow holds the overlap, to exercise the side-by-side lanes.
+    { title: "Weekly planning", dayOffset: 1, from: [9, 0], to: [9, 30] },
+    { title: "Klokgroep standup", dayOffset: 1, from: [10, 0], to: [10, 30], meet: true },
+    { title: "Marieke · roadmap", dayOffset: 1, from: [10, 15], to: [11, 0], meet: true, attendees: ["Marieke Jansen"] },
+    // The rest of the week.
+    {
+      title: "Meridian portal workshop",
+      dayOffset: 2,
+      from: [9, 0],
+      to: [11, 0],
+      location: "Utrecht HQ",
+      attendees: ["Marco Ricci"],
+    },
+    { title: "Klokgroep frontend review", dayOffset: 2, from: [14, 0], to: [15, 30], meet: true, attendees: ["Bram Hendriks"] },
+    { title: "Wende · DPA call", dayOffset: 3, from: [14, 0], to: [14, 45], meet: true, attendees: ["Wende Prins"] },
+    { title: "Ravel handover retro", dayOffset: 4, from: [11, 0], to: [12, 0], meet: true },
+    { title: "Design offsite", dayOffset: 3, allDays: 1 },
+    // Some history and some future, for the month view.
+    { title: "Klokgroep standup", dayOffset: -3, from: [10, 0], to: [10, 30], meet: true },
+    { title: "Meridian sync", dayOffset: -6, from: [11, 0], to: [11, 30], meet: true },
+    { title: "Eurotransplant lunch", dayOffset: 9, from: [13, 0], to: [14, 0], location: "Leiden" },
+    { title: "Klokgroep quarterly", dayOffset: 15, from: [10, 0], to: [12, 0], location: "Nijmegen" },
+  ];
+
+  let nextId = 1;
+  for (const meeting of MEETINGS) {
+    const allDay = meeting.allDays !== undefined;
+    await db.execute(
+      `INSERT INTO google_events
+         (id, calendar_id, title, start_at, end_at, start_day, end_day,
+          location, description, attendees, meet_url, html_link, status, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmed', ?)`,
+      [
+        `seed-${nextId++}`,
+        calendarId,
+        meeting.title,
+        allDay ? null : at(meeting.dayOffset, ...(meeting.from as [number, number])),
+        allDay ? null : at(meeting.dayOffset, ...(meeting.to as [number, number])),
+        allDay ? addDays(now, meeting.dayOffset) : null,
+        allDay ? addDays(now, meeting.dayOffset + (meeting.allDays as number)) : null,
+        meeting.location ?? null,
+        meeting.description ?? null,
+        JSON.stringify(
+          (meeting.attendees ?? []).map((name) => ({
+            name,
+            email: `${name.toLowerCase().replace(/[^a-z]+/g, ".")}@example.com`,
+            self: false,
+            response: "accepted",
+          })),
+        ),
+        meeting.meet ? "https://meet.google.com/seed-demo" : null,
+        "https://calendar.google.com/calendar/u/0/r",
+        at(0, 8),
       ],
     );
   }

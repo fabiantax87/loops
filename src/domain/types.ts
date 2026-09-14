@@ -22,6 +22,8 @@ export interface Client {
   id: number;
   name: string;
   notes: string | null;
+  /** You run this one, rather than only working for it — the rail says so. */
+  leading: boolean;
   archivedAt: Instant | null;
   createdAt: Instant;
 }
@@ -62,6 +64,8 @@ export interface Item {
   deadline: Day | null;
   /** Local 'HH:MM' on the deadline day, when a moment matters — reminder only. */
   deadlineTime: string | null;
+  /** How long it takes, in minutes. Null means the default (30). */
+  durationMinutes: number | null;
   /** The day it was first an idea. Survives promotion and demotion. */
   ideaSince: Day | null;
   /** The day it was picked up. On an idea it means "was in progress". */

@@ -91,3 +91,53 @@ export function isDue(day: Day, clock: Clock): boolean {
 export function daysAgo(instant: Instant, clock: Clock): number {
   return daysBetween(toDay(new Date(instant)), today(clock));
 }
+
+/** The local calendar day an instant falls on. */
+export function instantToDay(instant: Instant): Day {
+  return toDay(new Date(instant));
+}
+
+/** 'HH:MM' as minutes past midnight — the calendar's vertical axis. */
+export function minutesOfDay(time: string): number {
+  const [h, m] = time.split(":").map(Number);
+  return h * 60 + m;
+}
+
+/** The Monday of the week a day belongs to. */
+export function startOfWeek(day: Day): Day {
+  const dow = dayStart(day).getDay(); // 0 = Sunday
+  return addDays(day, -((dow + 6) % 7));
+}
+
+/** Monday to Friday of a day's week — the calendar shows the work week. */
+export function weekdays(day: Day): Day[] {
+  const monday = startOfWeek(day);
+  return [0, 1, 2, 3, 4].map((offset) => addDays(monday, offset));
+}
+
+export function startOfMonth(day: Day): Day {
+  return `${day.slice(0, 7)}-01`;
+}
+
+/** A month later (or earlier), clamped: Jan 31 + 1 month is Feb 28. */
+export function addMonths(day: Day, count: number): Day {
+  const [y, m, d] = day.split("-").map(Number);
+  const first = new Date(y, m - 1 + count, 1, 12);
+  const lastDay = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
+  return toDay(new Date(first.getFullYear(), first.getMonth(), Math.min(d, lastDay), 12));
+}
+
+/**
+ * The Monday-first weeks that cover a month — every row seven days, the first
+ * and last spilling into the neighbouring months the way a wall calendar does.
+ */
+export function monthGrid(day: Day): Day[][] {
+  const first = startOfMonth(day);
+  const firstOfNext = startOfMonth(addMonths(first, 1));
+  const start = startOfWeek(first);
+  const weeks: Day[][] = [];
+  for (let cursor = start; cursor < firstOfNext; cursor = addDays(cursor, 7)) {
+    weeks.push([0, 1, 2, 3, 4, 5, 6].map((offset) => addDays(cursor, offset)));
+  }
+  return weeks;
+}

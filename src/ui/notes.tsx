@@ -7,7 +7,7 @@ import { useStore } from "../state/store";
    shown under the title with any links made clickable. */
 
 /** In the app a link opens the real browser, never the webview. */
-function openExternal(url: string) {
+export function openExternal(url: string) {
   const href = url.startsWith("www.") ? `https://${url}` : url;
   if ("__TAURI_INTERNALS__" in window) {
     void import("@tauri-apps/plugin-opener").then(({ openUrl }) => openUrl(href));

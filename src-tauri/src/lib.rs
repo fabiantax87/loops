@@ -50,7 +50,47 @@ fn migrations() -> Vec<Migration> {
             sql: include_str!("../migrations/0007_item_notes.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 8,
+            description: "task durations and the Google Calendar cache",
+            sql: include_str!("../migrations/0008_calendar.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 9,
+            description: "clients you lead",
+            sql: include_str!("../migrations/0009_leading_clients.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
+}
+
+/// The keychain entries live under one service name; the key names the secret.
+/// Only the Google Calendar refresh token uses this today.
+const KEYCHAIN_SERVICE: &str = "nl.linku.loops";
+
+#[tauri::command]
+fn secret_set(key: String, value: String) -> Result<(), String> {
+    keyring::Entry::new(KEYCHAIN_SERVICE, &key)
+        .and_then(|entry| entry.set_password(&value))
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn secret_get(key: String) -> Result<Option<String>, String> {
+    match keyring::Entry::new(KEYCHAIN_SERVICE, &key).and_then(|entry| entry.get_password()) {
+        Ok(value) => Ok(Some(value)),
+        Err(keyring::Error::NoEntry) => Ok(None),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+#[tauri::command]
+fn secret_delete(key: String) -> Result<(), String> {
+    match keyring::Entry::new(KEYCHAIN_SERVICE, &key).and_then(|entry| entry.delete_credential()) {
+        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+        Err(e) => Err(e.to_string()),
+    }
 }
 
 /// The menu-bar presence: an icon, and a count when something is actually hot.
@@ -171,7 +211,14 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_process::init())
-        .invoke_handler(tauri::generate_handler![set_tray_badge])
+        .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_oauth::init())
+        .invoke_handler(tauri::generate_handler![
+            set_tray_badge,
+            secret_set,
+            secret_get,
+            secret_delete
+        ])
         .plugin(
             tauri_plugin_sql::Builder::default()
                 .add_migrations(DB_URL, migrations())

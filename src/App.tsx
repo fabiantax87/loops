@@ -10,6 +10,7 @@ import { TitleBar } from "./ui/Chrome";
 import { NewClientSheet } from "./ui/NewClientSheet";
 import { Rail } from "./ui/Rail";
 import { ArchiveScreen } from "./ui/ArchiveScreen";
+import { CalendarScreen } from "./ui/calendar/CalendarScreen";
 import { ClientScreen } from "./ui/ClientScreen";
 import { TodayScreen } from "./ui/TodayScreen";
 import { clientById, projectsOf } from "./domain/snapshot";
@@ -88,6 +89,8 @@ function Workspace() {
         <main className="flex min-w-0 flex-1 items-start justify-center overflow-y-auto px-10">
           {loading ? null : screen.name === "today" ? (
             <TodayScreen go={setScreen} onNewClient={() => setNaming(true)} />
+          ) : screen.name === "calendar" ? (
+            <CalendarScreen />
           ) : screen.name === "client" ? (
             <ClientScreen
               clientId={screen.clientId}
