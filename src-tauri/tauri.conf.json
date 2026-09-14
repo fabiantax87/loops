@@ -10,8 +10,10 @@
     "frontendDist": "../dist"
   },
   "app": {
+    "macOSPrivateApi": true,
     "windows": [
       {
+        "label": "main",
         "title": "Loops",
         "width": 1100,
         "height": 820,
@@ -19,7 +21,21 @@
         "minHeight": 640,
         "backgroundColor": "#0a0b0b",
         "titleBarStyle": "Overlay",
-        "hiddenTitle": true
+        "hiddenTitle": true,
+        "visible": false
+      },
+      {
+        "label": "capture",
+        "title": "Capture",
+        "width": 720,
+        "height": 560,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "center": true
       }
     ],
     "security": {

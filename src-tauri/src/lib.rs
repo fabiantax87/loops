@@ -116,6 +116,20 @@ fn show_main(app: &tauri::AppHandle) {
     }
 }
 
+/// The capture popup: a small always-on-top window over whatever you're doing,
+/// like Spotlight. Deliberately no activation-policy change — the main window
+/// stays where it is and no dock icon appears.
+#[cfg(desktop)]
+fn show_capture(app: &tauri::AppHandle, kind: &str) {
+    use tauri::{Emitter, Manager};
+
+    if let Some(window) = app.get_webview_window("capture") {
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+    let _ = app.emit_to("capture", "capture", serde_json::json!({ "kind": kind }));
+}
+
 /// The window closes; the app stays. The tray and the global shortcut only
 /// exist while the process lives, so "close" means hide, and Quit in the tray
 /// menu is the real exit.
@@ -158,13 +172,12 @@ fn build_tray(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> 
         .on_menu_event(|app, event| match event.id().as_ref() {
             "open" => show_main(app),
             "capture" | "capture-idea" | "capture-waiting" => {
-                show_main(app);
                 let kind = match event.id().as_ref() {
                     "capture-idea" => "idea",
                     "capture-waiting" => "waiting",
                     _ => "todo",
                 };
-                let _ = app.emit("capture", serde_json::json!({ "kind": kind }));
+                show_capture(app, kind);
             }
             // The updater lives in the frontend; show the window so its
             // title bar can report what the check finds.
@@ -181,10 +194,10 @@ fn build_tray(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> 
 }
 
 /// ⌘⇧L from anywhere. Capture is only a habit if it costs nothing to reach, so
-/// the shortcut is global and brings the window with it.
+/// the shortcut is global — it opens the popup over whatever has focus and
+/// leaves the main window alone.
 #[cfg(desktop)]
 fn register_capture_shortcut(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
-    use tauri::Emitter;
     use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
     let capture = Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::KeyL);
@@ -195,8 +208,7 @@ fn register_capture_shortcut(app: &tauri::AppHandle) -> Result<(), Box<dyn std::
                 if shortcut != &capture || event.state() != ShortcutState::Pressed {
                     return;
                 }
-                show_main(app);
-                let _ = app.emit("capture", ());
+                show_capture(app, "todo");
             })
             .build(),
     )?;
@@ -229,12 +241,26 @@ pub fn run() {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 use tauri::Manager;
                 api.prevent_close();
-                hide_main(window.app_handle());
+                // Closing the popup hides only the popup; closing the main
+                // window drops the app to the tray.
+                if window.label() == "capture" {
+                    let _ = window.hide();
+                } else {
+                    hide_main(window.app_handle());
+                }
             }
         })
         .setup(|app| {
             #[cfg(desktop)]
             {
+                // The app is never really quit (⌘Q hides), so at logout macOS
+                // would record it and reopen the full window at login. Opt out:
+                // the --hidden LaunchAgent is the only way in at login.
+                #[cfg(target_os = "macos")]
+                if let Some(mtm) = objc2::MainThreadMarker::new() {
+                    objc2_app_kit::NSApplication::sharedApplication(mtm)
+                        .disableRelaunchOnLogin();
+                }
                 // Updates come from GitHub Releases; the frontend checks at
                 // startup and offers a restart when one is ready.
                 app.handle()
@@ -259,8 +285,13 @@ pub fn run() {
                         let _ = autostart.enable();
                     }
                 }
+                // The window is created hidden (tauri.conf.json); a login
+                // launch stays that way and drops to the menu bar, a normal
+                // launch shows it. No flash either way.
                 if std::env::args().any(|arg| arg == "--hidden") {
                     hide_main(app.handle());
+                } else {
+                    show_main(app.handle());
                 }
             }
             Ok(())

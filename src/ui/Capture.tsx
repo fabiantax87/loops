@@ -89,8 +89,11 @@ function WhichOne({
  * (⌥1/2/3 without leaving the keyboard), routing comes from the names
  * in the sentence, and the visible fields follow the type — a todo shows the
  * deadline it requires, an idea shows nothing, a waiting-on offers a check-in.
+ *
+ * Just the card — the main window wraps it in a dimmed overlay (`Capture`),
+ * the popup window puts it in a transparent window of its own.
  */
-export function Capture({
+export function CapturePanel({
   onClose,
   preset,
 }: {
@@ -205,200 +208,213 @@ export function Capture({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-ink/60 pt-[16vh]"
-      onMouseDown={onClose}
+      className="w-[680px] overflow-hidden rounded-xl border border-[#313734] bg-hover shadow-[0_26px_70px_rgba(0,0,0,.6)]"
+      onMouseDown={(e) => e.stopPropagation()}
+      onKeyDown={onKeys}
     >
-      <div
-        className="w-[680px] overflow-hidden rounded-xl border border-[#313734] bg-hover shadow-[0_26px_70px_rgba(0,0,0,.6)]"
-        onMouseDown={(e) => e.stopPropagation()}
-        onKeyDown={onKeys}
-      >
-        <div className="flex items-center gap-2 border-b border-[#242927] px-5 py-3.5">
-          {KINDS.map(({ kind: k, label, key }) => (
-            <button
-              key={k}
-              type="button"
-              onClick={() => {
-                setKind(k);
-                field.current?.focus();
-              }}
-              className={`flex items-center gap-2 rounded-[7px] px-[13px] py-1.5 text-[13px] transition-colors ${
-                kind === k
-                  ? "bg-green text-ink"
-                  : "text-muted hover:bg-[#212624] hover:text-text"
-              }`}
-            >
-              {label}
-              <span
-                className={`fact text-[11px] ${kind === k ? "opacity-60" : "text-faint"}`}
-              >
-                {key}
-              </span>
-            </button>
-          ))}
-          <div className="flex-1" />
-          <span className="fact text-[11px] text-faint">⌥1/2/3 switches type</span>
-        </div>
-
-        <div className="flex items-center gap-3 p-5">
-          <span className="fact text-green">›</span>
-          <input
-            ref={field}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                save();
-              }
+      <div className="flex items-center gap-2 border-b border-[#242927] px-5 py-3.5">
+        {KINDS.map(({ kind: k, label, key }) => (
+          <button
+            key={k}
+            type="button"
+            onClick={() => {
+              setKind(k);
+              field.current?.focus();
             }}
-            placeholder={PLACEHOLDER[kind]}
-            className="flex-1 bg-transparent text-[18px] text-text outline-none placeholder:text-faint"
-          />
-        </div>
+            className={`flex items-center gap-2 rounded-[7px] px-[13px] py-1.5 text-[13px] transition-colors ${
+              kind === k
+                ? "bg-green text-ink"
+                : "text-muted hover:bg-[#212624] hover:text-text"
+            }`}
+          >
+            {label}
+            <span
+              className={`fact text-[11px] ${kind === k ? "opacity-60" : "text-faint"}`}
+            >
+              {key}
+            </span>
+          </button>
+        ))}
+        <div className="flex-1" />
+        <span className="fact text-[11px] text-faint">⌥1/2/3 switches type</span>
+      </div>
 
-        {showFooter && (
-          <div className="flex flex-col gap-3.5 border-t border-[#242927] bg-[#141716] px-5 pt-4 pb-4">
-            <div className="flex flex-wrap items-center gap-2">
-              {guess.ambiguous ? (
-                <WhichOne ambiguous={guess.ambiguous} onPick={set} />
-              ) : guess.client ? (
-                <Chip
-                  hint={
-                    guess.clientVia
-                      ? `from “${guess.clientVia}”`
-                      : preset?.client && overrides.client === undefined && !parsed.client
-                        ? "this page"
-                        : undefined
-                  }
-                >
-                  {guess.client.name}
-                </Chip>
-              ) : (
-                snapshot.clients
-                  .filter((c) => c.archivedAt === null)
-                  .map((client) => (
-                    <Chip
-                      key={client.id}
-                      selected={false}
-                      onClick={() => set({ client, project: null, contact: null })}
-                    >
-                      {client.name}
-                    </Chip>
-                  ))
-              )}
-              {guess.client && guess.project && !pickingProject && (
-                // Inferred, not gospel — click it to point the item elsewhere.
-                <Chip hint="⌄" onClick={() => setPickingProject(true)}>
-                  {guess.project.name}
-                </Chip>
-              )}
-              {guess.client && guess.project && pickingProject && (
-                <>
-                  {liveProjects(guess.client.id).map((project) => (
-                    <Chip
-                      key={project.id}
-                      selected={project.id === guess.project?.id}
-                      onClick={() => {
-                        set({ project });
-                        setPickingProject(false);
-                      }}
-                    >
-                      {project.name}
-                    </Chip>
-                  ))}
+      <div className="flex items-center gap-3 p-5">
+        <span className="fact text-green">›</span>
+        <input
+          ref={field}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              save();
+            }
+          }}
+          placeholder={PLACEHOLDER[kind]}
+          className="flex-1 bg-transparent text-[18px] text-text outline-none placeholder:text-faint"
+        />
+      </div>
+
+      {showFooter && (
+        <div className="flex flex-col gap-3.5 border-t border-[#242927] bg-[#141716] px-5 pt-4 pb-4">
+          <div className="flex flex-wrap items-center gap-2">
+            {guess.ambiguous ? (
+              <WhichOne ambiguous={guess.ambiguous} onPick={set} />
+            ) : guess.client ? (
+              <Chip
+                hint={
+                  guess.clientVia
+                    ? `from “${guess.clientVia}”`
+                    : preset?.client && overrides.client === undefined && !parsed.client
+                      ? "this page"
+                      : undefined
+                }
+              >
+                {guess.client.name}
+              </Chip>
+            ) : (
+              snapshot.clients
+                .filter((c) => c.archivedAt === null)
+                .map((client) => (
                   <Chip
+                    key={client.id}
                     selected={false}
-                    onClick={() => {
-                      set({ project: null });
-                      setPickingProject(false);
-                    }}
+                    onClick={() => set({ client, project: null, contact: null })}
                   >
-                    no project
+                    {client.name}
                   </Chip>
-                </>
-              )}
-              {guess.client && !guess.project &&
-                liveProjects(guess.client.id).length > 0 &&
-                liveProjects(guess.client.id).map((project) => (
+                ))
+            )}
+            {guess.client && guess.project && !pickingProject && (
+              // Inferred, not gospel — click it to point the item elsewhere.
+              <Chip hint="⌄" onClick={() => setPickingProject(true)}>
+                {guess.project.name}
+              </Chip>
+            )}
+            {guess.client && guess.project && pickingProject && (
+              <>
+                {liveProjects(guess.client.id).map((project) => (
                   <Chip
                     key={project.id}
-                    selected={false}
-                    onClick={() => set({ project })}
+                    selected={project.id === guess.project?.id}
+                    onClick={() => {
+                      set({ project });
+                      setPickingProject(false);
+                    }}
                   >
                     {project.name}
                   </Chip>
                 ))}
-              {guess.contact && <Chip>{guess.contact.name}</Chip>}
-            </div>
-
-            {kind !== "idea" && (
-              <div className="flex items-center gap-3">
-                <span className="label w-[78px] text-[11px] tracking-[.08em] text-muted">
-                  {kind === "todo" ? "Deadline" : "Check in"}
-                </span>
-                <input
-                  value={dateText}
-                  onChange={(e) => setDateText(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      save();
-                    }
+                <Chip
+                  selected={false}
+                  onClick={() => {
+                    set({ project: null });
+                    setPickingProject(false);
                   }}
-                  placeholder={guess.date ? guess.date.phrase : "mon · fri 15:00 · in 3 days"}
-                  className="w-44 rounded-md border border-outline-hover bg-[#212624] px-3 py-1.5 text-[14px] text-text outline-none placeholder:text-faint"
-                />
-                {effectiveDay ? (
-                  <span className="fact text-[12px] text-text">
-                    {niceDay(effectiveDay)}
-                    {effectiveTime && ` · ${effectiveTime}`}
-                  </span>
-                ) : dateText.trim() !== "" ? (
-                  <span className="fact text-[11px] text-faint">?</span>
-                ) : null}
-                <span className="fact text-[11px] text-faint">
-                  {kind === "todo" ? "required · type “mon”, “in 3 days”" : "or leave it open"}
-                </span>
-              </div>
+                >
+                  no project
+                </Chip>
+              </>
             )}
+            {guess.client && !guess.project &&
+              liveProjects(guess.client.id).length > 0 &&
+              liveProjects(guess.client.id).map((project) => (
+                <Chip
+                  key={project.id}
+                  selected={false}
+                  onClick={() => set({ project })}
+                >
+                  {project.name}
+                </Chip>
+              ))}
+            {guess.contact && <Chip>{guess.contact.name}</Chip>}
+          </div>
 
-            <div className="flex items-center gap-4">
-              <span className="fact text-[11px] text-faint">⏎ save</span>
-              <span className="fact text-[11px] text-faint">⇥ fields</span>
-              <span className="fact text-[11px] text-faint">esc dismiss</span>
-              <div className="flex-1" />
-              {reproach ? (
-                <span className="fact text-[11px] text-amber">{reproach}</span>
-              ) : kind === "idea" ? (
-                <span className="fact text-[11px] text-faint">
-                  no date — it waits for a quiet day
+          {kind !== "idea" && (
+            <div className="flex items-center gap-3">
+              <span className="label w-[78px] text-[11px] tracking-[.08em] text-muted">
+                {kind === "todo" ? "Deadline" : "Check in"}
+              </span>
+              <input
+                value={dateText}
+                onChange={(e) => setDateText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    save();
+                  }
+                }}
+                placeholder={guess.date ? guess.date.phrase : "mon · fri 15:00 · in 3 days"}
+                className="w-44 rounded-md border border-outline-hover bg-[#212624] px-3 py-1.5 text-[14px] text-text outline-none placeholder:text-faint"
+              />
+              {effectiveDay ? (
+                <span className="fact text-[12px] text-text">
+                  {niceDay(effectiveDay)}
+                  {effectiveTime && ` · ${effectiveTime}`}
                 </span>
-              ) : kind === "waiting" && effectiveDay ? (
-                <span className="fact text-[11px] text-faint">
-                  only resurfaces if nothing comes in
-                </span>
+              ) : dateText.trim() !== "" ? (
+                <span className="fact text-[11px] text-faint">?</span>
               ) : null}
+              <span className="fact text-[11px] text-faint">
+                {kind === "todo" ? "required · type “mon”, “in 3 days”" : "or leave it open"}
+              </span>
             </div>
-          </div>
-        )}
+          )}
 
-        {!showFooter && (
-          <div className="flex flex-col gap-2 border-t border-[#242927] bg-[#141716] px-5 pt-3.5 pb-4">
-            <span className="text-[13px] leading-[1.6] text-muted">
-              {kind === "todo" &&
-                "Something you owe, and the day you owe it by. Past that day it goes red and stays on top until it's done or moved."}
-              {kind === "idea" &&
-                "No dates. It rests until a day with nothing dated anywhere, when the oldest three surface."}
-              {kind === "waiting" &&
-                "Their move. Add a check-in day and Loops nudges you to chase if nothing has come back by then."}
-            </span>
-            <span className="fact text-[11px] text-faint">
-              naming a person routes it — “send Sanne the agreement by fri”
-            </span>
+          <div className="flex items-center gap-4">
+            <span className="fact text-[11px] text-faint">⏎ save</span>
+            <span className="fact text-[11px] text-faint">⇥ fields</span>
+            <span className="fact text-[11px] text-faint">esc dismiss</span>
+            <div className="flex-1" />
+            {reproach ? (
+              <span className="fact text-[11px] text-amber">{reproach}</span>
+            ) : kind === "idea" ? (
+              <span className="fact text-[11px] text-faint">
+                no date — it waits for a quiet day
+              </span>
+            ) : kind === "waiting" && effectiveDay ? (
+              <span className="fact text-[11px] text-faint">
+                only resurfaces if nothing comes in
+              </span>
+            ) : null}
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {!showFooter && (
+        <div className="flex flex-col gap-2 border-t border-[#242927] bg-[#141716] px-5 pt-3.5 pb-4">
+          <span className="text-[13px] leading-[1.6] text-muted">
+            {kind === "todo" &&
+              "Something you owe, and the day you owe it by. Past that day it goes red and stays on top until it's done or moved."}
+            {kind === "idea" &&
+              "No dates. It rests until a day with nothing dated anywhere, when the oldest three surface."}
+            {kind === "waiting" &&
+              "Their move. Add a check-in day and Loops nudges you to chase if nothing has come back by then."}
+          </span>
+          <span className="fact text-[11px] text-faint">
+            naming a person routes it — “send Sanne the agreement by fri”
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The main-window presentation: the card over a dimmed, click-to-dismiss veil. */
+export function Capture({
+  onClose,
+  preset,
+}: {
+  onClose: () => void;
+  preset?: CapturePreset;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center bg-ink/60 pt-[16vh]"
+      onMouseDown={onClose}
+    >
+      <CapturePanel onClose={onClose} preset={preset} />
     </div>
   );
 }

@@ -3,11 +3,14 @@
   "identifier": "default",
   "description": "Capability for the main window",
   "windows": [
-    "main"
+    "main",
+    "capture"
   ],
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",
+    "core:window:allow-hide",
+    "core:window:allow-show",
     "opener:default",
     "sql:default",
     "sql:allow-execute",

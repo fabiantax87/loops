@@ -61,6 +61,11 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* The capture popup rides a transparent Tauri window; only the card paints. */
+body.capture-window {
+  background: transparent;
+}
+
 /* Tailwind's reset gives buttons `cursor: default`. In a desktop app built
    almost entirely out of buttons, that reads as "nothing here is clickable". */
 button:not(:disabled),

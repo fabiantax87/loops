@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { SqlDriver } from "./db/driver";
 import { openDb } from "./db/tauri";
 import { systemClock } from "./lib/clock";
@@ -6,6 +7,7 @@ import { StoreProvider, useSnapshot, useStore } from "./state/store";
 import { useUpdater } from "./state/updater";
 import { useHotWatch } from "./state/watch";
 import { Capture, type CapturePreset } from "./ui/Capture";
+import { CaptureWindow } from "./ui/CaptureWindow";
 import { TitleBar } from "./ui/Chrome";
 import { NewClientSheet } from "./ui/NewClientSheet";
 import { Rail } from "./ui/Rail";
@@ -26,8 +28,9 @@ function Workspace() {
   useHotWatch(snapshot);
   const { update, restart } = useUpdater();
 
-  // ⌘⇧L reaches the window from anywhere; inside the app the same chord works
-  // without asking the OS.
+  // ⌘⇧L in the packaged app is a global shortcut that opens the capture
+  // popup window; this DOM fallback keeps the chord working at localhost,
+  // where there is no OS registration and no second window.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key.toLowerCase() === "l" && event.metaKey && event.shiftKey) {
@@ -36,23 +39,22 @@ function Workspace() {
       }
     };
     document.addEventListener("keydown", onKey);
-    let stop: (() => void) | undefined;
-    if ("__TAURI_INTERNALS__" in window) {
-      void import("@tauri-apps/api/event").then(({ listen }) =>
-        // The tray menu sends the item type along ("Capture Idea…"); the
-        // global shortcut sends nothing and lands on the default.
-        listen<CapturePreset | null>("capture", (event) =>
-          setCapturing(event.payload ?? {}),
-        ).then((un) => {
-          stop = un;
-        }),
-      );
-    }
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      stop?.();
-    };
+    return () => document.removeEventListener("keydown", onKey);
   }, []);
+
+  // Items saved from the capture popup land in the database behind this
+  // window's back; the popup announces them and this window re-reads.
+  const { reload } = useStore();
+  useEffect(() => {
+    if (!("__TAURI_INTERNALS__" in window)) return;
+    let stop: (() => void) | undefined;
+    void import("@tauri-apps/api/event").then(({ listen }) =>
+      listen("items-changed", () => void reload()).then((un) => {
+        stop = un;
+      }),
+    );
+    return () => stop?.();
+  }, [reload]);
 
   return (
     <div className="flex h-full flex-col bg-panel">
@@ -141,9 +143,25 @@ async function boot(): Promise<SqlDriver> {
   return db;
 }
 
+/**
+ * One frontend, two windows: "main" is the app, "capture" is the popup the
+ * global shortcut summons. The label is stamped on the webview before any
+ * script runs, so it's readable synchronously.
+ */
+function isCaptureWindow(): boolean {
+  if (!("__TAURI_INTERNALS__" in window)) return false;
+  return getCurrentWindow().label === "capture";
+}
+
 export default function App() {
   const [db, setDb] = useState<SqlDriver | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
+  const [capture] = useState(isCaptureWindow);
+
+  // The popup window is transparent; only the card paints.
+  useEffect(() => {
+    document.body.classList.toggle("capture-window", capture);
+  }, [capture]);
 
   useEffect(() => {
     boot().then(setDb, (error) => setFailure(String(error)));
@@ -156,11 +174,11 @@ export default function App() {
       </div>
     );
   }
-  if (!db) return <div className="h-full bg-panel" />;
+  if (!db) return capture ? null : <div className="h-full bg-panel" />;
 
   return (
     <StoreProvider db={db} clock={systemClock}>
-      <Workspace />
+      {capture ? <CaptureWindow /> : <Workspace />}
     </StoreProvider>
   );
 }
