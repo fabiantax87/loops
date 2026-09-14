@@ -101,8 +101,10 @@ fn build_tray(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> 
     let idea = MenuItem::with_id(app, "capture-idea", "Capture Idea…", true, None::<&str>)?;
     let waiting =
         MenuItem::with_id(app, "capture-waiting", "Capture Waiting-on…", true, None::<&str>)?;
+    let updates =
+        MenuItem::with_id(app, "check-updates", "Check for Updates…", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&open, &capture, &idea, &waiting, &quit])?;
+    let menu = Menu::with_items(app, &[&open, &capture, &idea, &waiting, &updates, &quit])?;
 
     // A template image: macOS ignores its colour and tints the alpha to match
     // the menu bar, so this one is flat black on transparent.
@@ -123,6 +125,12 @@ fn build_tray(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> 
                     _ => "todo",
                 };
                 let _ = app.emit("capture", serde_json::json!({ "kind": kind }));
+            }
+            // The updater lives in the frontend; show the window so its
+            // title bar can report what the check finds.
+            "check-updates" => {
+                show_main(app);
+                let _ = app.emit("check-updates", ());
             }
             "quit" => app.exit(0),
             _ => {}

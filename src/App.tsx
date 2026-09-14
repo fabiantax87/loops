@@ -56,6 +56,20 @@ function Workspace() {
   return (
     <div className="flex h-full flex-col bg-panel">
       <TitleBar>
+        {(update.phase === "checking" ||
+          update.phase === "current" ||
+          update.phase === "failed" ||
+          update.phase === "downloading") && (
+          <span className="fact px-[9px] py-[3px] text-[11px] text-muted">
+            {update.phase === "checking"
+              ? "checking for updates…"
+              : update.phase === "current"
+                ? "up to date"
+                : update.phase === "failed"
+                  ? "couldn't reach the update server"
+                  : `downloading ${update.version}…`}
+          </span>
+        )}
         {update.phase === "ready" && (
           <button
             type="button"
