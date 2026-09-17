@@ -128,6 +128,20 @@ fn show_capture(app: &tauri::AppHandle, kind: &str) {
     use tauri::{Emitter, Manager};
 
     if let Some(window) = app.get_webview_window("capture") {
+        // Like Spotlight, the popup belongs on the screen you're looking at:
+        // the one holding the cursor, not the primary. If the cursor can't be
+        // read the window just keeps its previous spot.
+        let monitor = app
+            .cursor_position()
+            .ok()
+            .and_then(|cursor| app.monitor_from_point(cursor.x, cursor.y).ok().flatten());
+        if let (Some(monitor), Ok(size)) = (monitor, window.outer_size()) {
+            let origin = monitor.position();
+            let area = monitor.size();
+            let x = origin.x + (area.width.saturating_sub(size.width) / 2) as i32;
+            let y = origin.y + (area.height.saturating_sub(size.height) / 2) as i32;
+            let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
+        }
         let _ = window.show();
         let _ = window.set_focus();
     }

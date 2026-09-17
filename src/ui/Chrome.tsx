@@ -7,10 +7,10 @@ import type { ReactNode } from "react";
  */
 export function TitleBar({
   children,
-  hint = "⌘⇧L to capture",
+  onCapture,
 }: {
   children?: ReactNode;
-  hint?: string;
+  onCapture?: () => void;
 }) {
   return (
     <div
@@ -19,14 +19,24 @@ export function TitleBar({
     >
       <div className="flex-1" data-tauri-drag-region />
       {children}
-      {/* Non-interactive text still needs the attribute, or the bar has a
-          dead patch you can't drag by. */}
-      <span
-        data-tauri-drag-region
-        className="fact text-[11px] tracking-[.04em] text-faint"
-      >
-        {hint}
-      </span>
+      {onCapture ? (
+        <button
+          type="button"
+          onClick={onCapture}
+          className="fact rounded-[5px] border border-outline px-[9px] py-[3px] text-[11px] tracking-[.04em] text-muted transition-colors hover:border-outline-hover hover:text-text"
+        >
+          Capture <span className="text-faint">⌘⇧L</span>
+        </button>
+      ) : (
+        /* Non-interactive text still needs the attribute, or the bar has a
+           dead patch you can't drag by. */
+        <span
+          data-tauri-drag-region
+          className="fact text-[11px] tracking-[.04em] text-faint"
+        >
+          ⌘⇧L to capture
+        </span>
+      )}
     </div>
   );
 }

@@ -58,7 +58,7 @@ function Workspace() {
 
   return (
     <div className="flex h-full flex-col bg-panel">
-      <TitleBar>
+      <TitleBar onCapture={() => setCapturing({})}>
         {(update.phase === "checking" ||
           update.phase === "current" ||
           update.phase === "failed" ||

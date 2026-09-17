@@ -105,6 +105,7 @@ export function CapturePanel({
   const { act } = useStore();
   const [kind, setKind] = useState<ItemKind>(preset?.kind ?? "todo");
   const [text, setText] = useState("");
+  const [notes, setNotes] = useState("");
   const [overrides, setOverrides] = useState<Partial<CaptureGuess>>({});
   const [dateText, setDateText] = useState("");
   const [pickingProject, setPickingProject] = useState(false);
@@ -166,6 +167,7 @@ export function CapturePanel({
       {
         kind,
         title: guess.title,
+        notes: notes.trim() || null,
         clientId: guess.client.id,
         projectId: guess.project?.id ?? null,
         contactId: guess.contact?.id ?? null,
@@ -258,6 +260,20 @@ export function CapturePanel({
 
       {showFooter && (
         <div className="flex flex-col gap-3.5 border-t border-[#242927] bg-[#141716] px-5 pt-4 pb-4">
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            onKeyDown={(e) => {
+              // Enter writes a newline here; ⌘⏎ saves from anywhere.
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                save();
+              }
+            }}
+            placeholder="Notes — context, links, whatever the title can't carry"
+            rows={2}
+            className="w-full resize-none rounded-md border border-outline bg-[#212624] px-3 py-2 text-[13px] leading-[1.55] text-text outline-none placeholder:text-faint focus:border-outline-hover"
+          />
           <div className="flex flex-wrap items-center gap-2">
             {guess.ambiguous ? (
               <WhichOne ambiguous={guess.ambiguous} onPick={set} />

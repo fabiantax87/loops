@@ -236,6 +236,8 @@ export interface NewItem {
   contactId?: number | null;
   kind: ItemKind;
   title: string;
+  /** Context, links, the paragraph the title stands for. */
+  notes?: string | null;
   /** Required for a todo — capture enforces it before it gets here. */
   deadline?: Day | null;
   /** Local 'HH:MM' on the deadline day, for a reminder at that moment. */
@@ -260,16 +262,17 @@ export const items = {
     }
     const { lastInsertId } = await db.execute(
       `INSERT INTO items
-         (client_id, project_id, contact_id, kind, title, deadline, deadline_time,
+         (client_id, project_id, contact_id, kind, title, notes, deadline, deadline_time,
           duration_minutes, idea_since, sent_on, checkin_on, checkin_time,
           created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         input.clientId,
         input.projectId ?? null,
         input.contactId ?? null,
         input.kind,
         input.title.trim(),
+        input.notes?.trim() || null,
         input.kind === "todo" ? input.deadline : null,
         input.kind === "todo" ? (input.deadlineTime ?? null) : null,
         input.kind === "todo" ? (input.durationMinutes ?? null) : null,

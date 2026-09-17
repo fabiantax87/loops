@@ -9,6 +9,8 @@ type Act = (write: (db: SqlDriver, clock: Clock) => Promise<unknown>) => Promise
 export interface CaptureDraft {
   kind: ItemKind;
   title: string;
+  /** Context, links, whatever the title can't carry. */
+  notes: string | null;
   clientId: number;
   projectId: number | null;
   contactId: number | null;
@@ -34,6 +36,7 @@ export async function commitCapture(draft: CaptureDraft, act: Act): Promise<bool
       contactId: draft.contactId,
       kind: draft.kind,
       title: draft.title,
+      notes: draft.notes,
       deadline: draft.deadline,
       deadlineTime: draft.deadlineTime,
       checkinOn: draft.checkinOn,
