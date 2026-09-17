@@ -30,6 +30,7 @@ import {
 } from "./HourGrid";
 import { useBlockDrag } from "./useBlockDrag";
 import { MeetingDetail } from "./MeetingDetail";
+import { TaskDetail } from "./TaskDetail";
 import { MonthView } from "./MonthView";
 import { TaskEditor } from "./TaskEditor";
 import { WeekView } from "./WeekView";
@@ -73,6 +74,7 @@ export function CalendarScreen() {
   const [view, setView] = useState<CalendarView>("day");
   const [anchor, setAnchor] = useState<Day>(() => today(clock));
   const [opened, setOpened] = useState<Meeting | null>(null);
+  const [viewing, setViewing] = useState<TaskEntry | null>(null);
   const [editing, setEditing] = useState<TaskEntry | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [settings, setSettings] = useState(false);
@@ -80,7 +82,7 @@ export function CalendarScreen() {
 
   const open = (content: BlockContent) => {
     if (content.type === "meeting") setOpened(content.meeting);
-    else setEditing(content.task);
+    else setViewing(content.task);
   };
 
   const connection = useCalendar(anchor);
@@ -133,7 +135,8 @@ export function CalendarScreen() {
 
   // ← → move by the view's unit; T comes home. Never while typing or while a
   // sheet holds the screen.
-  const sheetOpen = opened !== null || editing !== null || connecting || settings;
+  const sheetOpen =
+    opened !== null || viewing !== null || editing !== null || connecting || settings;
   useEffect(() => {
     if (sheetOpen) return;
     const onKey = (event: KeyboardEvent) => {
@@ -209,7 +212,7 @@ export function CalendarScreen() {
               entries={model.entries}
               dueToday={anchor === today(clock)}
               onOpenMeeting={open}
-              onEdit={setEditing}
+              onEdit={setViewing}
             />
           </div>
           <HourGutter
@@ -236,7 +239,7 @@ export function CalendarScreen() {
           startHour={model.startHour}
           endHour={model.endHour}
           onOpen={open}
-          onEditTask={setEditing}
+          onEditTask={setViewing}
           onOpenDay={openDay}
           drag={drag}
         />
@@ -280,6 +283,16 @@ export function CalendarScreen() {
       </footer>
 
       {opened && <MeetingDetail meeting={opened} onClose={() => setOpened(null)} />}
+      {viewing && (
+        <TaskDetail
+          task={viewing}
+          onEdit={() => {
+            setEditing(viewing);
+            setViewing(null);
+          }}
+          onClose={() => setViewing(null)}
+        />
+      )}
       {editing && <TaskEditor task={editing} onClose={() => setEditing(null)} />}
       {connecting && <ConnectSheet connection={connection} onClose={() => setConnecting(false)} />}
       {settings && (
