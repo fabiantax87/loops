@@ -47,7 +47,7 @@ export function CaptureWindow() {
 
   return (
     <div
-      className="flex h-full items-start justify-center pt-4"
+      className="flex h-full items-start justify-center pt-12"
       onMouseDown={close}
     >
       {session && (

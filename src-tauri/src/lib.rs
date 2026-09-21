@@ -120,6 +120,33 @@ fn show_main(app: &tauri::AppHandle) {
     }
 }
 
+/// The monitor holding the mouse cursor, resolved entirely in logical points.
+/// tao's cursor_position() returns logical points multiplied by the PRIMARY
+/// monitor's scale factor, while monitor bounds are physical in each monitor's
+/// OWN scale factor — mixing them picks the wrong screen on Retina/mixed-DPI
+/// setups, so everything is normalized to logical before the hit-test.
+#[cfg(desktop)]
+fn monitor_under_cursor(app: &tauri::AppHandle) -> Option<tauri::Monitor> {
+    let cursor = app.cursor_position().ok()?;
+    let primary_scale = app
+        .primary_monitor()
+        .ok()
+        .flatten()
+        .map(|m| m.scale_factor())
+        .unwrap_or(1.0);
+    let point = tauri::LogicalPosition::new(cursor.x / primary_scale, cursor.y / primary_scale);
+
+    app.available_monitors().ok()?.into_iter().find(|m| {
+        let scale = m.scale_factor();
+        let pos: tauri::LogicalPosition<f64> = m.position().to_logical(scale);
+        let size: tauri::LogicalSize<f64> = m.size().to_logical(scale);
+        point.x >= pos.x
+            && point.x < pos.x + size.width
+            && point.y >= pos.y
+            && point.y < pos.y + size.height
+    })
+}
+
 /// The capture popup: a small always-on-top window over whatever you're doing,
 /// like Spotlight. Deliberately no activation-policy change — the main window
 /// stays where it is and no dock icon appears.
@@ -130,17 +157,23 @@ fn show_capture(app: &tauri::AppHandle, kind: &str) {
     if let Some(window) = app.get_webview_window("capture") {
         // Like Spotlight, the popup belongs on the screen you're looking at:
         // the one holding the cursor, not the primary. If the cursor can't be
-        // read the window just keeps its previous spot.
-        let monitor = app
-            .cursor_position()
+        // read the window just keeps its previous spot. The math stays in
+        // logical points end to end: handing set_position a PhysicalPosition
+        // would make tao divide by the window's CURRENT screen's scale factor,
+        // misplacing the window when it moves between mixed-DPI displays.
+        let size = window
+            .outer_size()
             .ok()
-            .and_then(|cursor| app.monitor_from_point(cursor.x, cursor.y).ok().flatten());
-        if let (Some(monitor), Ok(size)) = (monitor, window.outer_size()) {
-            let origin = monitor.position();
-            let area = monitor.size();
-            let x = origin.x + (area.width.saturating_sub(size.width) / 2) as i32;
-            let y = origin.y + (area.height.saturating_sub(size.height) / 2) as i32;
-            let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
+            .zip(window.scale_factor().ok())
+            .map(|(size, scale)| size.to_logical::<f64>(scale));
+        if let (Some(monitor), Some(size)) = (monitor_under_cursor(app), size) {
+            let scale = monitor.scale_factor();
+            let area = monitor.work_area();
+            let origin: tauri::LogicalPosition<f64> = area.position.to_logical(scale);
+            let extent: tauri::LogicalSize<f64> = area.size.to_logical(scale);
+            let x = origin.x + (extent.width - size.width) / 2.0;
+            let y = origin.y + (extent.height - size.height) / 2.0;
+            let _ = window.set_position(tauri::LogicalPosition::new(x, y));
         }
         let _ = window.show();
         let _ = window.set_focus();
