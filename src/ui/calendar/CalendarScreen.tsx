@@ -202,19 +202,9 @@ export function CalendarScreen() {
 
   return (
     <div className="flex w-full max-w-[980px] flex-col gap-[30px] py-11">
-      <header className="flex items-end gap-5">
-        <div className="flex flex-1 flex-col gap-3">
-          <span className="label text-muted">{model.rangeLabel}</span>
-          <p className="m-0 text-[22px] leading-[1.5] tracking-[-.01em] text-text text-pretty">
-            {model.summary.warning
-              ? model.summary.text.slice(0, -model.summary.warning.length)
-              : model.summary.text}
-            {model.summary.warning && (
-              <span className="text-amber">{model.summary.warning}</span>
-            )}
-          </p>
-        </div>
-        <div className="flex items-center gap-[18px] pb-1">
+      <header className="flex items-center gap-5">
+        <span className="label flex-1 text-muted">{model.rangeLabel}</span>
+        <div className="flex items-center gap-[18px]">
           <div className="flex items-center gap-1">
             <button
               type="button"
