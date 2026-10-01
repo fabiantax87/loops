@@ -54,12 +54,24 @@ browser.
 | Where | What lives there |
 | --- | --- |
 | `src-tauri/migrations/` | The schema. One source of truth, run by Rust in the app and by `src/db/migrations.ts` in tests |
-| `src/domain/` | All the logic: the dashboard bands, idea selection, chase windows, the capture parser |
+| `src/domain/` | All the logic: the dashboard bands, idea selection, chase windows, the capture parser, the calendar's capacity and summary sentences |
+| `src/google/`, `src/productive/` | The two read-only integrations: auth, the API calls, and a window sync each |
 | `src/db/` | The `SqlDriver` seam and its three implementations (Tauri, `node:sqlite`, sql.js) |
 | `src/ui/` | Screens and the handful of primitives they share |
 | `src/dev/` | The seeded demo data, and the script that writes it into the real database |
 | `docs/` | The spec (`SPEC.md`) and the design canvas (`design/Loops.dc.html`) |
 | `assets/` | The icon source: `icon.svg` for the app, `tray.mvg` for the menu bar |
+
+**Borrowed data stays borrowed.** Google Calendar meetings and Productive
+bookings are cached locally (`google_events`, `productive_bookings`) and
+replaced a window at a time on every sync; nothing is ever written back. A
+booking is a day-level allocation with no set time, so it never lands on the
+hour grid. Instead the calendar's capacity strip adds it to the day's timed
+meetings and timed tasks against an eight-hour day, and says in amber when
+the day runs over. Credentials live in the macOS Keychain: the Google refresh
+token, and the Productive personal API token (Settings → API integrations in
+Productive, pasted with the organization id). If Productive stops answering,
+bookings drop out of every view rather than going stale.
 
 **Time is injected.** Nothing calls `new Date()`; the clock comes from
 `src/lib/clock.ts`, so tests walk the app forward through deadlines and

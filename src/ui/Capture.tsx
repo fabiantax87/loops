@@ -258,8 +258,16 @@ export function CapturePanel({
         />
       </div>
 
-      {showFooter && (
-        <div className="flex flex-col gap-3.5 border-t border-[#242927] bg-[#141716] px-5 pt-4 pb-4">
+      <div
+        // grid-rows 0fr→1fr animates height without measuring; inert keeps
+        // the collapsed fields out of the tab order while they stay mounted.
+        inert={!showFooter}
+        className={`grid transition-[grid-template-rows] duration-300 ease-out ${
+          showFooter ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+        }`}
+      >
+        <div className="min-h-0 overflow-hidden">
+          <div className="flex flex-col gap-3.5 border-t border-[#242927] bg-[#141716] px-5 pt-4 pb-4">
           <textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
@@ -396,23 +404,23 @@ export function CapturePanel({
             ) : null}
           </div>
         </div>
-      )}
-
-      {!showFooter && (
-        <div className="flex flex-col gap-2 border-t border-[#242927] bg-[#141716] px-5 pt-3.5 pb-4">
-          <span className="text-[13px] leading-[1.6] text-muted">
-            {kind === "todo" &&
-              "Something you owe, and the day you owe it by. Past that day it goes red and stays on top until it's done or moved."}
-            {kind === "idea" &&
-              "No dates. It rests until a day with nothing dated anywhere, when the oldest three surface."}
-            {kind === "waiting" &&
-              "Their move. Add a check-in day and Loops nudges you to chase if nothing has come back by then."}
-          </span>
-          <span className="fact text-[11px] text-faint">
-            naming a person routes it — “send Sanne the agreement by fri”
-          </span>
         </div>
-      )}
+      </div>
+
+      <div
+        inert={showFooter}
+        className={`grid transition-[grid-template-rows] duration-300 ease-out ${
+          showFooter ? "grid-rows-[0fr]" : "grid-rows-[1fr]"
+        }`}
+      >
+        <div className="min-h-0 overflow-hidden">
+          <div className="flex flex-col gap-2 border-t border-[#242927] bg-[#141716] px-5 pt-3.5 pb-4">
+            <span className="fact text-[11px] text-faint">
+              naming a person routes it — “send Sanne the agreement by fri”
+            </span>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

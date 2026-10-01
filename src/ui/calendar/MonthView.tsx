@@ -1,4 +1,5 @@
 import type { MonthCell } from "../../domain/calendar";
+import { hoursLabel } from "../../domain/capacity";
 import { dayStart } from "../../lib/time";
 import { countOf } from "../../domain/words";
 
@@ -20,12 +21,17 @@ function Cell({ cell, onOpenDay }: { cell: MonthCell; onOpenDay: (day: string) =
             : "bg-panel"
       } ${cell.inMonth ? "" : "opacity-45"}`}
     >
-      <span
-        className={`text-[13px] ${
-          cell.isToday ? "text-green" : cell.isWeekend ? "text-faint" : "text-muted"
-        }`}
-      >
-        {dayStart(cell.day).getDate()}
+      <span className="flex w-full items-baseline justify-between gap-1.5">
+        <span
+          className={`text-[13px] ${
+            cell.isToday ? "text-green" : cell.isWeekend ? "text-faint" : "text-muted"
+          }`}
+        >
+          {dayStart(cell.day).getDate()}
+        </span>
+        {cell.overMinutes > 0 && (
+          <span className="fact text-[11px] text-amber">+{hoursLabel(cell.overMinutes)}</span>
+        )}
       </span>
       {cell.lateCount > 0 && (
         <span className="flex items-center gap-1.5 text-[12px] text-[#e08b74]">
@@ -42,6 +48,11 @@ function Cell({ cell, onOpenDay }: { cell: MonthCell; onOpenDay: (day: string) =
       {cell.meetingCount > 0 && (
         <span className="text-[12px] text-muted">
           · {countOf(cell.meetingCount, "meeting")}
+        </span>
+      )}
+      {cell.projects.length > 0 && (
+        <span className="mt-auto line-clamp-2 text-[11px] leading-[1.4] text-muted">
+          {cell.projects.join(" · ")}
         </span>
       )}
     </button>

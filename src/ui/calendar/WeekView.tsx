@@ -1,6 +1,8 @@
 import type { BlockContent, TaskEntry, WeekDayModel } from "../../domain/calendar";
 import { pillLabel } from "../../domain/calendar";
+import { hoursLabel } from "../../domain/capacity";
 import { dayStart } from "../../lib/time";
+import { WeekCapacity } from "./Capacity";
 import { DayColumn, HourGutter, WEEK_PX_PER_HOUR as PX_PER_HOUR } from "./HourGrid";
 import type { BlockDrag } from "./useBlockDrag";
 
@@ -9,8 +11,9 @@ import type { BlockDrag } from "./useBlockDrag";
 function DayHeader({ model }: { model: WeekDayModel }) {
   const date = dayStart(model.day);
   const weekday = new Intl.DateTimeFormat("en-GB", { weekday: "short" }).format(date);
+  const over = model.capacity.overMinutes;
   return (
-    <div className="flex flex-col gap-0.5 pb-3">
+    <div className="flex min-w-0 flex-col gap-0.5 pb-3">
       <span
         className={`label text-[10px] tracking-[.12em] ${
           model.isToday ? "text-green" : "text-faint"
@@ -18,9 +21,13 @@ function DayHeader({ model }: { model: WeekDayModel }) {
       >
         {weekday}
       </span>
-      <span className={`text-[20px] ${model.isToday ? "text-text" : "text-muted"}`}>
-        {date.getDate()}
-      </span>
+      <div className="flex items-baseline gap-2">
+        <span className={`text-[20px] ${model.isToday ? "text-text" : "text-muted"}`}>
+          {date.getDate()}
+        </span>
+        {over > 0 && <span className="fact text-[11px] text-amber">+{hoursLabel(over)}</span>}
+      </div>
+      <WeekCapacity capacity={model.capacity} />
     </div>
   );
 }
@@ -104,7 +111,7 @@ export function WeekView({
           key={model.day}
           type="button"
           onClick={() => onOpenDay(model.day)}
-          className="text-left"
+          className="min-w-0 self-start text-left"
         >
           <DayHeader model={model} />
         </button>

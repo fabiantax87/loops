@@ -257,9 +257,10 @@ describe("buildCalendar", () => {
     timedMeeting("2026-09-14", 14, 14.75, "Check-in"),
     timedMeeting("2026-09-16", 9, 11, "Workshop"),
   ];
+  const sources = { meetings, bookings: [], bookingsSynced: true };
 
   it("lays the day out with its meetings, tasks and now-line", () => {
-    const model = buildCalendar(snapshot, meetings, clock, "day", "2026-09-14");
+    const model = buildCalendar(snapshot, sources, clock, "day", "2026-09-14");
     if (model.view !== "day") throw new Error("expected day");
     expect(model.rangeLabel).toBe("Monday 14 September");
     expect(model.entries.blocks.filter((b) => b.content.type === "meeting")).toHaveLength(3);
@@ -270,7 +271,7 @@ describe("buildCalendar", () => {
   });
 
   it("builds the work week with a pill per loaded day", () => {
-    const model = buildCalendar(snapshot, meetings, clock, "week", "2026-09-16");
+    const model = buildCalendar(snapshot, sources, clock, "week", "2026-09-16");
     if (model.view !== "week") throw new Error("expected week");
     expect(model.rangeLabel).toBe("14 – 20 September");
     expect(model.days.map((d) => d.day)).toEqual([
@@ -295,7 +296,7 @@ describe("buildCalendar", () => {
   });
 
   it("counts the month cell by cell", () => {
-    const model = buildCalendar(snapshot, meetings, clock, "month", "2026-09-14");
+    const model = buildCalendar(snapshot, sources, clock, "month", "2026-09-14");
     if (model.view !== "month") throw new Error("expected month");
     expect(model.rangeLabel).toBe("September 2026");
     const cells = new Map(model.weeks.flat().map((c) => [c.day, c]));

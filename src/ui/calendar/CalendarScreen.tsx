@@ -2,12 +2,14 @@ import { useEffect, useMemo, useState } from "react";
 import { items, meta } from "../../db/repo";
 import {
   type BlockContent,
+  type Booking,
   type CalendarView,
   type Meeting,
   type TaskEntry,
   buildCalendar,
   rescheduleWrite,
 } from "../../domain/calendar";
+import { showsStrip } from "../../domain/capacity";
 import { useClock } from "../../lib/ClockContext";
 import {
   type Day,
@@ -17,11 +19,14 @@ import {
   daysAgo,
   today,
 } from "../../lib/time";
-import { useCalendar } from "../../state/calendarSync";
+import { type SyncPhase, useCalendar } from "../../state/calendarSync";
+import { useProductive } from "../../state/productiveSync";
 import { useSnapshot, useStore } from "../../state/store";
 import type { Clock } from "../../lib/clock";
+import { BookingDetail, CapacityStrip, DayTotalDetail } from "./Capacity";
 import { AllDayShelf } from "./DayView";
 import { CalendarSettingsSheet, ConnectSheet } from "./ConnectGoogle";
+import { ConnectProductiveSheet, ProductiveSettingsSheet } from "./ConnectProductive";
 import {
   DAY_PX_PER_HOUR,
   DayColumn,
@@ -66,6 +71,27 @@ function agoLabel(instant: Instant, clock: Clock): string {
   return days === 1 ? "synced yesterday" : `synced ${days} days ago`;
 }
 
+/** "Sat" · "14 Sep" — when the bookings stopped being trustworthy. */
+function sinceLabel(instant: Instant, clock: Clock): string {
+  const days = daysAgo(instant, clock);
+  const at = new Date(instant);
+  if (days === 0) return "today";
+  if (days < 7) return new Intl.DateTimeFormat("en-GB", { weekday: "short" }).format(at);
+  return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" }).format(at);
+}
+
+/** The footer's status words, shared by both connections. */
+function phaseLabel(
+  phase: SyncPhase,
+  lastSync: Instant | null,
+  clock: Clock,
+  service: string,
+): string {
+  if (phase === "syncing") return "syncing…";
+  if (phase === "error") return `couldn't reach ${service}`;
+  return lastSync ? agoLabel(lastSync, clock) : "";
+}
+
 export function CalendarScreen() {
   const snapshot = useSnapshot();
   const clock = useClock();
@@ -78,6 +104,10 @@ export function CalendarScreen() {
   const [editing, setEditing] = useState<TaskEntry | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [settings, setSettings] = useState(false);
+  const [booking, setBooking] = useState<Booking | null>(null);
+  const [total, setTotal] = useState(false);
+  const [connectingProductive, setConnectingProductive] = useState(false);
+  const [productiveSettings, setProductiveSettings] = useState(false);
   const { act } = useStore();
 
   const open = (content: BlockContent) => {
@@ -86,10 +116,21 @@ export function CalendarScreen() {
   };
 
   const connection = useCalendar(anchor);
+  const productive = useProductive(anchor);
+  // Bookings only count while Productive is actually syncing; a dropped
+  // connection hides them rather than letting them go stale.
+  const bookingsSynced = !productive.available || productive.phase !== "disconnected";
   // Rebuilt on every pointermove otherwise — five days of blocks, re-sorted.
   const model = useMemo(
-    () => buildCalendar(snapshot, connection.meetings, clock, view, anchor),
-    [snapshot, connection.meetings, clock, view, anchor],
+    () =>
+      buildCalendar(
+        snapshot,
+        { meetings: connection.meetings, bookings: productive.bookings, bookingsSynced },
+        clock,
+        view,
+        anchor,
+      ),
+    [snapshot, connection.meetings, productive.bookings, bookingsSynced, clock, view, anchor],
   );
 
   const hours = model.view === "month" ? null : model;
@@ -136,7 +177,15 @@ export function CalendarScreen() {
   // ← → move by the view's unit; T comes home. Never while typing or while a
   // sheet holds the screen.
   const sheetOpen =
-    opened !== null || viewing !== null || editing !== null || connecting || settings;
+    opened !== null ||
+    viewing !== null ||
+    editing !== null ||
+    booking !== null ||
+    total ||
+    connecting ||
+    settings ||
+    connectingProductive ||
+    productiveSettings;
   useEffect(() => {
     if (sheetOpen) return;
     const onKey = (event: KeyboardEvent) => {
@@ -153,9 +202,19 @@ export function CalendarScreen() {
 
   return (
     <div className="flex w-full max-w-[980px] flex-col gap-[30px] py-11">
-      <header className="flex items-center gap-5">
-        <span className="label flex-1 text-muted">{model.rangeLabel}</span>
-        <div className="flex items-center gap-[18px]">
+      <header className="flex items-end gap-5">
+        <div className="flex flex-1 flex-col gap-3">
+          <span className="label text-muted">{model.rangeLabel}</span>
+          <p className="m-0 text-[22px] leading-[1.5] tracking-[-.01em] text-text text-pretty">
+            {model.summary.warning
+              ? model.summary.text.slice(0, -model.summary.warning.length)
+              : model.summary.text}
+            {model.summary.warning && (
+              <span className="text-amber">{model.summary.warning}</span>
+            )}
+          </p>
+        </div>
+        <div className="flex items-center gap-[18px] pb-1">
           <div className="flex items-center gap-1">
             <button
               type="button"
@@ -202,6 +261,17 @@ export function CalendarScreen() {
 
       {model.view === "day" && (
         <div className="grid grid-cols-[64px_1fr] gap-x-[18px]">
+          {showsStrip(model.capacity) && (
+            <>
+              <span className="fact pt-3 pr-1.5 text-right text-[11px] text-faint">day</span>
+              <CapacityStrip
+                capacity={model.capacity}
+                onOpenBooking={setBooking}
+                onOpenTotal={() => setTotal(true)}
+                onOpenBlock={open}
+              />
+            </>
+          )}
           <span className="fact pt-3.5 pr-1.5 text-right text-[11px] text-faint">
             {model.entries.allDayMeetings.length + model.entries.untimedTasks.length > 0
               ? "all day"
@@ -247,39 +317,94 @@ export function CalendarScreen() {
 
       {model.view === "month" && <MonthView weeks={model.weeks} onOpenDay={openDay} />}
 
-      <footer className="flex items-center gap-2.5 border-t border-hairline pt-4">
-        <span className="label text-[10px] tracking-[.14em] text-faint">Google Calendar</span>
-        {!connection.available ? (
-          <span className="fact text-[11px] text-faint">demo data at localhost</span>
-        ) : connection.phase === "disconnected" ? (
-          <button
-            type="button"
-            onClick={() => setConnecting(true)}
-            className="fact text-[11px] text-green transition-colors hover:text-green-hover"
-          >
-            connect…
-          </button>
-        ) : (
-          <>
-            <span className="fact text-[11px] text-muted">
-              {connection.email ?? "connected"}
-              {connection.phase === "syncing"
-                ? " · syncing…"
-                : connection.phase === "error"
-                  ? " · couldn't reach Google"
-                  : connection.lastSync
-                    ? ` · ${agoLabel(connection.lastSync, clock)}`
-                    : ""}
-            </span>
+      <footer className="flex flex-col gap-2 border-t border-hairline pt-4">
+        <div className="flex items-center gap-2.5">
+          <span className="label w-[112px] text-[10px] tracking-[.14em] text-faint">
+            Google Calendar
+          </span>
+          {!connection.available ? (
+            <span className="fact text-[11px] text-faint">demo data at localhost</span>
+          ) : connection.phase === "disconnected" ? (
             <button
               type="button"
-              onClick={() => setSettings(true)}
-              className="fact text-[11px] text-faint transition-colors hover:text-text"
+              onClick={() => setConnecting(true)}
+              className="fact text-[11px] text-green transition-colors hover:text-green-hover"
             >
-              settings
+              connect…
             </button>
-          </>
-        )}
+          ) : (
+            <>
+              <span className="fact text-[11px] text-muted">
+                {connection.email ?? "connected"}
+                {(() => {
+                  const status = phaseLabel(connection.phase, connection.lastSync, clock, "Google");
+                  return status ? ` · ${status}` : "";
+                })()}
+              </span>
+              <button
+                type="button"
+                onClick={() => setSettings(true)}
+                className="fact text-[11px] text-faint transition-colors hover:text-text"
+              >
+                settings
+              </button>
+            </>
+          )}
+        </div>
+        <div className="flex items-center gap-2.5">
+          <span className="label w-[112px] text-[10px] tracking-[.14em] text-faint">
+            Productive
+          </span>
+          {!productive.available ? (
+            <span className="fact text-[11px] text-faint">demo data at localhost</span>
+          ) : productive.phase === "disconnected" ? (
+            productive.wasConnected ? (
+              <>
+                <span className="fact text-[11px] text-amber">
+                  Disconnected · bookings hidden since{" "}
+                  {sinceLabel(productive.lastSync as Instant, clock)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setConnectingProductive(true)}
+                  className="fact text-[11px] text-green transition-colors hover:text-green-hover"
+                >
+                  Reconnect
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConnectingProductive(true)}
+                className="fact text-[11px] text-green transition-colors hover:text-green-hover"
+              >
+                connect…
+              </button>
+            )
+          ) : (
+            <>
+              <span className="fact text-[11px] text-muted">
+                {productive.orgName ?? "connected"}
+                {(() => {
+                  const status = phaseLabel(
+                    productive.phase,
+                    productive.lastSync,
+                    clock,
+                    "Productive",
+                  );
+                  return status ? ` · ${status}` : "";
+                })()}
+              </span>
+              <button
+                type="button"
+                onClick={() => setProductiveSettings(true)}
+                className="fact text-[11px] text-faint transition-colors hover:text-text"
+              >
+                settings
+              </button>
+            </>
+          )}
+        </div>
       </footer>
 
       {opened && <MeetingDetail meeting={opened} onClose={() => setOpened(null)} />}
@@ -294,6 +419,30 @@ export function CalendarScreen() {
         />
       )}
       {editing && <TaskEditor task={editing} onClose={() => setEditing(null)} />}
+      {booking && (
+        <BookingDetail booking={booking} day={anchor} onClose={() => setBooking(null)} />
+      )}
+      {total && model.view === "day" && (
+        <DayTotalDetail
+          capacity={model.capacity}
+          day={anchor}
+          onOpenBooking={setBooking}
+          onOpenBlock={open}
+          onClose={() => setTotal(false)}
+        />
+      )}
+      {connectingProductive && (
+        <ConnectProductiveSheet
+          connection={productive}
+          onClose={() => setConnectingProductive(false)}
+        />
+      )}
+      {productiveSettings && (
+        <ProductiveSettingsSheet
+          connection={productive}
+          onClose={() => setProductiveSettings(false)}
+        />
+      )}
       {connecting && <ConnectSheet connection={connection} onClose={() => setConnecting(false)} />}
       {settings && (
         <CalendarSettingsSheet connection={connection} onClose={() => setSettings(false)} />

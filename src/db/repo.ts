@@ -2,7 +2,7 @@ import type { SqlDriver } from "./driver";
 import type { Clock } from "../lib/clock";
 import { type Day, type Instant, addDays, daysBetween, nowInstant, toDay, today } from "../lib/time";
 import type { IdeasOfDay, Snapshot } from "../domain/snapshot";
-import type { Meeting } from "../domain/calendar";
+import type { Booking, Meeting } from "../domain/calendar";
 import type { Client, Contact, Item, ItemKind, Project, ProjectStatus } from "../domain/types";
 
 /* Rows come back snake_case; the app speaks camelCase. The mapping is dull and
@@ -598,6 +598,79 @@ export const googleEvents = {
   async clear(db: SqlDriver): Promise<void> {
     await db.execute("DELETE FROM google_events");
     await db.execute("DELETE FROM google_calendars");
+  },
+};
+
+function booking(r: Row): Booking {
+  return {
+    id: r.id,
+    project: r.project,
+    client: r.client,
+    startDay: r.start_day,
+    endDay: r.end_day,
+    minutesPerDay: r.minutes_per_day,
+    note: r.note,
+    url: r.url,
+    draft: r.draft === 1,
+  };
+}
+
+/**
+ * The local cache of Productive bookings, kept the same way as the Google
+ * events: a window is replaced wholesale on every sync, so a booking that
+ * moved or was cancelled simply stops being here.
+ */
+export const productiveBookings = {
+  async replaceWindow(
+    db: SqlDriver,
+    clock: Clock,
+    fromDay: Day,
+    toDay: Day,
+    bookings: Booking[],
+  ): Promise<void> {
+    await db.execute(
+      "DELETE FROM productive_bookings WHERE start_day <= ? AND end_day >= ?",
+      [toDay, fromDay],
+    );
+    for (const b of bookings) {
+      await db.execute(
+        `INSERT INTO productive_bookings
+           (id, project, client, start_day, end_day, minutes_per_day, note, url, draft, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (id) DO UPDATE SET
+           project = excluded.project, client = excluded.client,
+           start_day = excluded.start_day, end_day = excluded.end_day,
+           minutes_per_day = excluded.minutes_per_day, note = excluded.note,
+           url = excluded.url, draft = excluded.draft, updated_at = excluded.updated_at`,
+        [
+          b.id,
+          b.project,
+          b.client,
+          b.startDay,
+          b.endDay,
+          b.minutesPerDay,
+          b.note,
+          b.url,
+          b.draft ? 1 : 0,
+          nowInstant(clock),
+        ],
+      );
+    }
+  },
+
+  /** Every cached booking touching the window of days, both ends inclusive. */
+  async listBetween(db: SqlDriver, fromDay: Day, toDay: Day): Promise<Booking[]> {
+    const rows = await db.select<Row>(
+      `SELECT * FROM productive_bookings
+        WHERE start_day <= ? AND end_day >= ?
+        ORDER BY start_day, project COLLATE NOCASE`,
+      [toDay, fromDay],
+    );
+    return rows.map(booking);
+  },
+
+  async clear(db: SqlDriver): Promise<void> {
+    await db.execute("DELETE FROM productive_bookings");
   },
 };
 

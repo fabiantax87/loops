@@ -66,11 +66,17 @@ fn migrations() -> Vec<Migration> {
             sql: include_str!("../migrations/0009_leading_clients.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 10,
+            description: "the Productive bookings cache",
+            sql: include_str!("../migrations/0010_productive.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
 /// The keychain entries live under one service name; the key names the secret.
-/// Only the Google Calendar refresh token uses this today.
+/// The Google Calendar refresh token and the Productive API token live here.
 const KEYCHAIN_SERVICE: &str = "nl.linku.loops";
 
 #[tauri::command]

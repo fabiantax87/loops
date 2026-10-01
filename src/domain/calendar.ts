@@ -13,9 +13,14 @@ import {
   today,
   weekdays,
 } from "../lib/time";
+import { type Summary, daySummary, monthSummary, weekSummary, cellProjects } from "./calendarSummary";
+import { type Booking, type DayCapacity, bookingsOn, dayCapacity } from "./capacity";
 import { attribution, openItems, type Snapshot } from "./snapshot";
 import type { Item } from "./types";
 import { countOf } from "./words";
+
+export type { Booking, DayCapacity } from "./capacity";
+export type { Summary } from "./calendarSummary";
 
 /**
  * The calendar puts two different worlds on one grid: the app's own items
@@ -108,6 +113,7 @@ export interface WeekDayModel {
   entries: DayEntries;
   pill: WeekPill | null;
   nowMinutes: number | null;
+  capacity: DayCapacity;
 }
 
 export interface MonthCell {
@@ -118,11 +124,24 @@ export interface MonthCell {
   taskCount: number;
   lateCount: number;
   meetingCount: number;
+  /** The projects booked that day, named once each. */
+  projects: string[];
+  overMinutes: number;
 }
 
 export interface CalendarHeader {
   /** "Monday 14 September" · "14 – 20 September" · "September 2026" */
   rangeLabel: string;
+  /** The range as a sentence, under the label. */
+  summary: Summary;
+}
+
+/** Where the calendar's borrowed data comes from, and whether it can be trusted. */
+export interface CalendarSources {
+  meetings: Meeting[];
+  bookings: Booking[];
+  /** False while Productive is disconnected: bookings are missing, not absent. */
+  bookingsSynced: boolean;
 }
 
 export type CalendarModel = CalendarHeader &
@@ -131,6 +150,7 @@ export type CalendarModel = CalendarHeader &
         view: "day";
         anchor: Day;
         entries: DayEntries;
+        capacity: DayCapacity;
         startHour: number;
         endHour: number;
         nowMinutes: number | null;
@@ -464,19 +484,25 @@ const WEEK_HOURS = { start: 9, end: 18 };
 
 export function buildCalendar(
   snapshot: Snapshot,
-  meetings: Meeting[],
+  sources: CalendarSources,
   clock: Clock,
   view: CalendarView,
   anchor: Day,
 ): CalendarModel {
+  const { meetings, bookings, bookingsSynced } = sources;
+  const now = today(clock);
+
   if (view === "day") {
     const entries = entriesForDay(snapshot, meetings, clock, anchor, { collectOverdue: true });
+    const capacity = dayCapacity(entries, bookings, { bookingsSynced });
     const { startHour, endHour } = hourRange([entries.blocks], DAY_HOURS);
     return {
       view,
       anchor,
       rangeLabel: dayLabel(anchor),
+      summary: daySummary(entries, capacity, anchor === now),
       entries,
+      capacity,
       startHour,
       endHour,
       nowMinutes: nowLineMinutes(clock, anchor),
@@ -484,7 +510,6 @@ export function buildCalendar(
   }
 
   if (view === "week") {
-    const now = today(clock);
     const days: WeekDayModel[] = weekdays(anchor).map((day) => {
       const entries = entriesForDay(snapshot, meetings, clock, day);
       return {
@@ -493,6 +518,7 @@ export function buildCalendar(
         entries,
         pill: weekPill(entries),
         nowMinutes: nowLineMinutes(clock, day),
+        capacity: dayCapacity(entries, bookings, { bookingsSynced }),
       };
     });
     const { startHour, endHour } = hourRange(
@@ -503,13 +529,13 @@ export function buildCalendar(
       view,
       anchor,
       rangeLabel: weekLabel(anchor),
+      summary: weekSummary(days, bookingsSynced),
       days,
       startHour,
       endHour,
     };
   }
 
-  const now = today(clock);
   const inMonth = anchor.slice(0, 7);
   const weeks: MonthCell[][] = monthGrid(anchor).map((week) =>
     week.map((day) => {
@@ -517,6 +543,7 @@ export function buildCalendar(
       const tasks = tasksOf(entries);
       const late = tasks.filter((t) => t.late).length;
       const dow = dayStart(day).getDay();
+      const capacity = dayCapacity(entries, bookings, { bookingsSynced });
       return {
         day,
         inMonth: day.slice(0, 7) === inMonth,
@@ -525,6 +552,8 @@ export function buildCalendar(
         taskCount: tasks.length - late,
         lateCount: late,
         meetingCount: meetingsOf(entries),
+        projects: cellProjects(bookingsSynced ? bookingsOn(bookings, day) : []),
+        overMinutes: capacity.overMinutes,
       };
     }),
   );
@@ -532,6 +561,7 @@ export function buildCalendar(
     view,
     anchor,
     rangeLabel: monthLabel(anchor),
+    summary: monthSummary(weeks.flat(), bookingsSynced),
     weeks,
   };
 }

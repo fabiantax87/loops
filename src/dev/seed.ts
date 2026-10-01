@@ -1,6 +1,6 @@
 import type { SqlDriver } from "../db/driver";
 import type { Clock } from "../lib/clock";
-import { type Day, addDays, dayStart, today } from "../lib/time";
+import { type Day, addDays, dayStart, nowInstant, today } from "../lib/time";
 import type { ItemKind, ItemOutcome } from "../domain/types";
 
 /**
@@ -360,6 +360,60 @@ export async function seed(db: SqlDriver, clock: Clock): Promise<void> {
   }
 
   await seedMeetings(db, clock);
+  await seedBookings(db, clock);
+}
+
+/**
+ * A believable week of Productive bookings: mostly one client, a split day,
+ * and a day that runs over once the meetings are added on top.
+ */
+async function seedBookings(db: SqlDriver, clock: Clock): Promise<void> {
+  const now = today(clock);
+  const BOOKINGS: {
+    project: string;
+    client: string;
+    from: number;
+    to: number;
+    hours: number;
+    note?: string;
+  }[] = [
+    // Today: 6h plus 2h15 of meetings and a 45 min task — over by an hour.
+    {
+      project: "Corporate",
+      client: "Eurotransplant",
+      from: 0,
+      to: 0,
+      hours: 6,
+      note: "Redirect map and cut-over prep for the corporate site.",
+    },
+    // Tomorrow splits between two clients.
+    { project: "Corporate", client: "Eurotransplant", from: 1, to: 1, hours: 4 },
+    { project: "Frontend", client: "Klokgroep", from: 1, to: 1, hours: 2 },
+    // A multi-day booking, so the same row shows on several days.
+    { project: "Frontend", client: "Klokgroep", from: 2, to: 3, hours: 6 },
+    // Next week, and a stretch of last week for the month view.
+    { project: "Portal rebuild", client: "Meridian Health", from: 7, to: 9, hours: 6 },
+    { project: "Corporate", client: "Eurotransplant", from: -7, to: -3, hours: 6 },
+  ];
+  let nextId = 1;
+  for (const b of BOOKINGS) {
+    await db.execute(
+      `INSERT INTO productive_bookings
+         (id, project, client, start_day, end_day, minutes_per_day, note, url, draft, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+      [
+        `seed-${nextId++}`,
+        b.project,
+        b.client,
+        addDays(now, b.from),
+        addDays(now, b.to),
+        b.hours * 60,
+        b.note ?? null,
+        "https://app.productive.io/",
+        nowInstant(clock),
+      ],
+    );
+  }
 }
 
 /**
