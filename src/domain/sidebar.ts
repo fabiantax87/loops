@@ -14,6 +14,8 @@ export interface ClientSignal {
   client: Client;
   late: number;
   owed: number;
+  /** Open todos due today and check-ins falling today — the green dot. */
+  today: number;
   /** The one word the sidebar shows, or null when the client is fine. */
   badge: string | null;
   tone: Tone;
@@ -35,8 +37,14 @@ export function clientSignals(snapshot: Snapshot, clock: Clock): ClientSignal[] 
       const owed = open.filter(
         (i) => i.kind === "waiting" && i.checkinOn !== null && i.checkinOn <= now,
       ).length;
+      const todayCount = open.filter(
+        (i) =>
+          (i.kind === "todo" && i.deadline === now) ||
+          (i.kind === "waiting" && i.checkinOn === now),
+      ).length;
 
       // Lateness is the only red thing in the app, and it outranks the rest.
+      // Green says only "there is something today" — no word, no sorting.
       let badge: string | null = null;
       let tone: Tone = "grey";
       if (late > 0) {
@@ -45,9 +53,11 @@ export function clientSignals(snapshot: Snapshot, clock: Clock): ClientSignal[] 
       } else if (owed > 0) {
         badge = "waiting";
         tone = "amber";
+      } else if (todayCount > 0) {
+        tone = "green";
       }
 
-      return { client, late, owed, badge, tone, fine: badge === null };
+      return { client, late, owed, today: todayCount, badge, tone, fine: badge === null };
     });
 
   // Everyone who wants something, then everyone who doesn't.

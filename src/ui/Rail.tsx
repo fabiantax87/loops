@@ -6,6 +6,7 @@ import type { Screen } from "./navigation";
 const DOT: Record<string, string> = {
   red: "bg-red",
   amber: "bg-amber",
+  green: "bg-green",
   muted: "bg-quiet-dot",
   grey: "bg-quiet-dot",
 };
@@ -13,6 +14,7 @@ const DOT: Record<string, string> = {
 const BADGE: Record<string, string> = {
   red: "text-red",
   amber: "text-amber",
+  green: "text-green",
   muted: "text-muted",
   grey: "text-faint",
 };
@@ -127,7 +129,7 @@ export function Rail({
         <ClientBand label="Clients" signals={rest} screen={screen} go={go} />
         {signals.length > 0 && (
           <span className="px-[13px] pt-1 font-mono text-[10px] leading-relaxed text-faint">
-            Grey means fine.
+            Grey means fine · green means today.
           </span>
         )}
       </div>

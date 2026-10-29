@@ -11,7 +11,7 @@ const clock = fixedClock(new Date(2026, 8, 3, 9, 0));
 let nextId = 1;
 
 function client(name: string): Client {
-  return { id: nextId++, name, notes: null, leading: false, archivedAt: null, createdAt: "" };
+  return { id: nextId++, name, notes: null, email: null, leading: false, archivedAt: null, createdAt: "" };
 }
 
 function project(clientId: number, name: string): Project {

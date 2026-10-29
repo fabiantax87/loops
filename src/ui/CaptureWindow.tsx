@@ -20,13 +20,15 @@ export function CaptureWindow() {
     let stop: (() => void) | undefined;
     void import("@tauri-apps/api/event").then(({ listen }) =>
       listen<{ kind?: ItemKind } | null>("capture", (event) => {
-        // Clients and contacts drive the parsing; pick up anything added
-        // in the main window since the last capture.
-        void reload();
-        setSession((current) => ({
-          id: (current?.id ?? 0) + 1,
-          kind: event.payload?.kind ?? "todo",
-        }));
+        // Clients, projects and contacts drive the parsing and fill the
+        // dropdowns; pick up anything added in the main window since the
+        // last capture before the panel mounts on it.
+        void reload().then(() =>
+          setSession((current) => ({
+            id: (current?.id ?? 0) + 1,
+            kind: event.payload?.kind ?? "todo",
+          })),
+        );
       }).then((un) => {
         stop = un;
       }),

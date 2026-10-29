@@ -17,6 +17,7 @@ function client(r: Row): Client {
     id: r.id,
     name: r.name,
     notes: r.notes,
+    email: r.email ?? null,
     leading: !!r.leading,
     archivedAt: r.archived_at,
     createdAt: r.created_at,
@@ -115,11 +116,13 @@ export const clients = {
     clock: Clock,
     input: {
       name: string;
+      email?: string | null;
       projects: string[];
       contacts: { name: string; role?: string | null; projectName?: string | null }[];
     },
   ): Promise<number> {
     const clientId = await clients.create(db, clock, input.name);
+    if (input.email?.trim()) await clients.setEmail(db, clientId, input.email);
     const byName = new Map<string, number>();
     for (const name of input.projects) {
       const trimmed = name.trim();
@@ -143,6 +146,11 @@ export const clients = {
 
   async rename(db: SqlDriver, id: number, name: string): Promise<void> {
     await db.execute("UPDATE clients SET name = ? WHERE id = ?", [name.trim(), id]);
+  },
+
+  /** Where mail to them goes. Empty clears it. */
+  async setEmail(db: SqlDriver, id: number, email: string | null): Promise<void> {
+    await db.execute("UPDATE clients SET email = ? WHERE id = ?", [email?.trim() || null, id]);
   },
 
   /** Whether this is a client you lead. The rail gives those their own band. */
@@ -170,6 +178,10 @@ export const projects = {
       [clientId, name.trim(), nowInstant(clock)],
     );
     return lastInsertId;
+  },
+
+  async rename(db: SqlDriver, id: number, name: string): Promise<void> {
+    await db.execute("UPDATE projects SET name = ? WHERE id = ?", [name.trim(), id]);
   },
 
   async setStatus(db: SqlDriver, id: number, status: ProjectStatus): Promise<void> {
@@ -345,12 +357,28 @@ export const items = {
     );
   },
 
-  /** A new day for a todo — the way out of critical. */
-  async reschedule(db: SqlDriver, clock: Clock, id: number, deadline: Day): Promise<void> {
-    await db.execute(
-      "UPDATE items SET deadline = ?, updated_at = ? WHERE id = ?",
-      [deadline, nowInstant(clock), id],
-    );
+  /**
+   * A new day for a todo — the way out of critical. A time given (or null)
+   * replaces the moment; left undefined, the moment it had comes along.
+   */
+  async reschedule(
+    db: SqlDriver,
+    clock: Clock,
+    id: number,
+    deadline: Day,
+    deadlineTime?: string | null,
+  ): Promise<void> {
+    if (deadlineTime === undefined) {
+      await db.execute(
+        "UPDATE items SET deadline = ?, updated_at = ? WHERE id = ?",
+        [deadline, nowInstant(clock), id],
+      );
+    } else {
+      await db.execute(
+        "UPDATE items SET deadline = ?, deadline_time = ?, updated_at = ? WHERE id = ?",
+        [deadline, deadlineTime, nowInstant(clock), id],
+      );
+    }
   },
 
   /**
@@ -411,20 +439,41 @@ export const items = {
    * "Now it's my move" — they replied and the next step is mine. The waiting-on
    * becomes a real todo, deadline required.
    */
-  async myMove(db: SqlDriver, clock: Clock, id: number, deadline: Day): Promise<void> {
+  async myMove(
+    db: SqlDriver,
+    clock: Clock,
+    id: number,
+    deadline: Day,
+    deadlineTime: string | null = null,
+  ): Promise<void> {
     await db.execute(
       `UPDATE items
-         SET kind = 'todo', deadline = ?, checkin_on = NULL, updated_at = ?
+         SET kind = 'todo', deadline = ?, deadline_time = ?, checkin_on = NULL,
+             checkin_time = NULL, updated_at = ?
        WHERE id = ?`,
-      [deadline, nowInstant(clock), id],
+      [deadline, deadlineTime, nowInstant(clock), id],
     );
   },
 
-  async setCheckin(db: SqlDriver, clock: Clock, id: number, checkinOn: Day | null): Promise<void> {
-    await db.execute(
-      "UPDATE items SET checkin_on = ?, updated_at = ? WHERE id = ?",
-      [checkinOn, nowInstant(clock), id],
-    );
+  /** A check-in day; a time given (or null) replaces the moment, undefined keeps it. */
+  async setCheckin(
+    db: SqlDriver,
+    clock: Clock,
+    id: number,
+    checkinOn: Day | null,
+    checkinTime?: string | null,
+  ): Promise<void> {
+    if (checkinTime === undefined) {
+      await db.execute(
+        "UPDATE items SET checkin_on = ?, updated_at = ? WHERE id = ?",
+        [checkinOn, nowInstant(clock), id],
+      );
+    } else {
+      await db.execute(
+        "UPDATE items SET checkin_on = ?, checkin_time = ?, updated_at = ? WHERE id = ?",
+        [checkinOn, checkinTime, nowInstant(clock), id],
+      );
+    }
   },
 
   /** The calendar's editor for a waiting-on: when to chase, and for how long. */
@@ -606,6 +655,7 @@ function booking(r: Row): Booking {
     id: r.id,
     project: r.project,
     client: r.client,
+    budget: r.budget ?? null,
     startDay: r.start_day,
     endDay: r.end_day,
     minutesPerDay: r.minutes_per_day,
@@ -635,10 +685,10 @@ export const productiveBookings = {
     for (const b of bookings) {
       await db.execute(
         `INSERT INTO productive_bookings
-           (id, project, client, start_day, end_day, minutes_per_day, note, url, draft, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           (id, project, client, budget, start_day, end_day, minutes_per_day, note, url, draft, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (id) DO UPDATE SET
-           project = excluded.project, client = excluded.client,
+           project = excluded.project, client = excluded.client, budget = excluded.budget,
            start_day = excluded.start_day, end_day = excluded.end_day,
            minutes_per_day = excluded.minutes_per_day, note = excluded.note,
            url = excluded.url, draft = excluded.draft, updated_at = excluded.updated_at`,
@@ -646,6 +696,7 @@ export const productiveBookings = {
           b.id,
           b.project,
           b.client,
+          b.budget,
           b.startDay,
           b.endDay,
           b.minutesPerDay,

@@ -164,7 +164,10 @@ export async function listBookings(
     const deal = related(service, "deal");
     if (deal) dealIds.add(deal);
   }
-  const deals = new Map<string, { project: string | null; company: string | null }>();
+  const deals = new Map<
+    string,
+    { project: string | null; company: string | null; budget: string | null }
+  >();
   for (const dealId of dealIds) {
     const url = new URL(`${API}/deals/${dealId}`);
     url.searchParams.set("include", "project,company");
@@ -176,10 +179,11 @@ export async function listBookings(
       deals.set(dealId, {
         project: text(find("projects", related(deal, "project")), "name") ?? text(deal, "name"),
         company: text(find("companies", related(deal, "company")), "name"),
+        budget: text(deal, "name"),
       });
     } catch (error) {
       if (error instanceof Unauthorized) throw error;
-      deals.set(dealId, { project: null, company: null });
+      deals.set(dealId, { project: null, company: null, budget: null });
     }
   }
 
@@ -200,6 +204,7 @@ export async function listBookings(
       id: r.id,
       project: deal?.project ?? text(service, "name") ?? "Project",
       client: deal?.company ?? null,
+      budget: deal?.budget ?? null,
       startDay: startDay.slice(0, 10),
       endDay: endDay.slice(0, 10),
       minutesPerDay: minutes,

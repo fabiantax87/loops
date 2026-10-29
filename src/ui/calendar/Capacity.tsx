@@ -156,7 +156,7 @@ export function WeekCapacity({ capacity }: { capacity: DayCapacity }) {
         <div className="mt-1 flex flex-col gap-px">
           {capacity.bookings.map((booking) => (
             <span key={booking.id} className="truncate text-[12px] text-muted">
-              {booking.project}{" "}
+              {bookingLabel(booking)}{" "}
               <span className="fact text-[10px]">{hoursLabel(booking.minutesPerDay)}</span>
             </span>
           ))}
@@ -214,8 +214,16 @@ export function BookingDetail({
         <span className="label text-faint">
           Productive booking{booking.draft ? " · draft" : ""}
         </span>
-        <span className="text-[19px] leading-[1.35] text-text">{booking.project}</span>
-        {booking.client && <span className="text-[14px] text-muted">{booking.client}</span>}
+        <span className="text-[19px] leading-[1.35] text-text">
+          {booking.budget ?? booking.project}
+        </span>
+        {(booking.client || booking.budget) && (
+          <span className="text-[14px] text-muted">
+            {[booking.client, booking.budget ? booking.project : null]
+              .filter((part) => part && part !== booking.budget)
+              .join(" · ")}
+          </span>
+        )}
       </div>
       <div className="grid grid-cols-[64px_1fr] gap-x-3.5 gap-y-2.5">
         <span className="fact pt-0.5 text-[11px] text-faint">when</span>

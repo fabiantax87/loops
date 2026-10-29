@@ -7,6 +7,7 @@ import { useClock } from "../lib/ClockContext";
 import type { Day } from "../lib/time";
 import { commitCapture } from "../state/commit";
 import { useSnapshot, useStore } from "../state/store";
+import { Select } from "./primitives";
 
 const KINDS: { kind: ItemKind; label: string; key: string }[] = [
   { kind: "todo", label: "Todo", key: "⌥1" },
@@ -108,7 +109,6 @@ export function CapturePanel({
   const [notes, setNotes] = useState("");
   const [overrides, setOverrides] = useState<Partial<CaptureGuess>>({});
   const [dateText, setDateText] = useState("");
-  const [pickingProject, setPickingProject] = useState(false);
   const [reproach, setReproach] = useState<string | null>(null);
   const field = useRef<HTMLInputElement>(null);
 
@@ -126,12 +126,14 @@ export function CapturePanel({
     ...overrides,
   };
 
-  // A fresh sentence starts a fresh guess; your overrides only outlive edits
-  // to the fields themselves.
+  // A pick from the dropdowns has to survive typing on, or it is useless; it
+  // only yields when the sentence itself starts pointing somewhere new.
+  const routing = `${parsed.client?.id ?? ""}|${parsed.ambiguous?.name ?? ""}`;
   useEffect(() => {
     setOverrides({});
+  }, [routing]);
+  useEffect(() => {
     setReproach(null);
-    setPickingProject(false);
   }, [text]);
 
   // The date: an explicit entry in the field wins; failing that, whatever the
@@ -203,8 +205,7 @@ export function CapturePanel({
     }
   };
 
-  const liveProjects = (clientId: number) =>
-    projectsOf(snapshot, clientId).filter((p) => p.status !== "done");
+  const liveClients = snapshot.clients.filter((c) => c.archivedAt === null);
 
   const showFooter = text.trim().length > 0;
 
@@ -282,78 +283,56 @@ export function CapturePanel({
             rows={2}
             className="w-full resize-none rounded-md border border-outline bg-[#212624] px-3 py-2 text-[13px] leading-[1.55] text-text outline-none placeholder:text-faint focus:border-outline-hover"
           />
-          <div className="flex flex-wrap items-center gap-2">
-            {guess.ambiguous ? (
+          {guess.ambiguous && (
+            <div className="flex flex-wrap items-center gap-2">
               <WhichOne ambiguous={guess.ambiguous} onPick={set} />
-            ) : guess.client ? (
-              <Chip
-                hint={
-                  guess.clientVia
-                    ? `from “${guess.clientVia}”`
-                    : preset?.client && overrides.client === undefined && !parsed.client
-                      ? "this page"
-                      : undefined
-                }
-              >
-                {guess.client.name}
-              </Chip>
-            ) : (
-              snapshot.clients
-                .filter((c) => c.archivedAt === null)
-                .map((client) => (
-                  <Chip
-                    key={client.id}
-                    selected={false}
-                    onClick={() => set({ client, project: null, contact: null })}
-                  >
-                    {client.name}
-                  </Chip>
-                ))
-            )}
-            {guess.client && guess.project && !pickingProject && (
-              // Inferred, not gospel — click it to point the item elsewhere.
-              <Chip hint="⌄" onClick={() => setPickingProject(true)}>
-                {guess.project.name}
-              </Chip>
-            )}
-            {guess.client && guess.project && pickingProject && (
-              <>
-                {liveProjects(guess.client.id).map((project) => (
-                  <Chip
-                    key={project.id}
-                    selected={project.id === guess.project?.id}
-                    onClick={() => {
-                      set({ project });
-                      setPickingProject(false);
-                    }}
-                  >
-                    {project.name}
-                  </Chip>
-                ))}
-                <Chip
-                  selected={false}
-                  onClick={() => {
-                    set({ project: null });
-                    setPickingProject(false);
-                  }}
-                >
-                  no project
-                </Chip>
-              </>
-            )}
-            {guess.client && !guess.project &&
-              liveProjects(guess.client.id).length > 0 &&
-              liveProjects(guess.client.id).map((project) => (
-                <Chip
-                  key={project.id}
-                  selected={false}
-                  onClick={() => set({ project })}
-                >
-                  {project.name}
-                </Chip>
-              ))}
-            {guess.contact && <Chip>{guess.contact.name}</Chip>}
+            </div>
+          )}
+          <div className="flex items-center gap-3">
+            <span className="label w-[78px] text-[11px] tracking-[.08em] text-muted">Client</span>
+            <Select
+              label="Client"
+              className="w-56"
+              value={guess.client ? String(guess.client.id) : ""}
+              choices={[
+                { value: "", label: guess.client ? "— no client —" : "— pick a client —" },
+                ...liveClients.map((c) => ({ value: String(c.id), label: c.name })),
+              ]}
+              onChange={(value) => {
+                const client = liveClients.find((c) => String(c.id) === value) ?? null;
+                set({ client, project: null, contact: null, ambiguous: null, clientVia: null });
+              }}
+            />
+            <span className="label w-[60px] text-right text-[11px] tracking-[.08em] text-muted">
+              Project
+            </span>
+            <Select
+              label="Project"
+              className="w-56"
+              disabled={!guess.client}
+              value={guess.project ? String(guess.project.id) : ""}
+              choices={[
+                { value: "", label: "— no project —" },
+                ...(guess.client ? projectsOf(snapshot, guess.client.id) : []).map((p) => ({
+                  value: String(p.id),
+                  label: p.status === "done" ? `${p.name} (done)` : p.name,
+                })),
+              ]}
+              onChange={(value) =>
+                set({ project: snapshot.projects.find((p) => String(p.id) === value) ?? null })
+              }
+            />
           </div>
+          {(guess.clientVia || guess.contact || (preset?.client && overrides.client === undefined && !parsed.client)) && (
+            <div className="flex flex-wrap items-center gap-2">
+              {guess.contact && <Chip>{guess.contact.name}</Chip>}
+              {guess.clientVia ? (
+                <span className="fact text-[11px] text-faint">routed from “{guess.clientVia}”</span>
+              ) : preset?.client && overrides.client === undefined && !parsed.client ? (
+                <span className="fact text-[11px] text-faint">from this page</span>
+              ) : null}
+            </div>
+          )}
 
           {kind !== "idea" && (
             <div className="flex items-center gap-3">
@@ -402,6 +381,13 @@ export function CapturePanel({
                 only resurfaces if nothing comes in
               </span>
             ) : null}
+            <button
+              type="button"
+              onClick={save}
+              className="rounded-[7px] bg-green px-4 py-[7px] text-[13px] text-ink transition-colors hover:bg-green-hover"
+            >
+              Save
+            </button>
           </div>
         </div>
         </div>

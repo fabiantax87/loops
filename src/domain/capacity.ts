@@ -12,6 +12,8 @@ export interface Booking {
   /** The project's name, or the budget's when the deal has no project. */
   project: string;
   client: string | null;
+  /** The budget the hours are booked against — "Frontend", "Support 2026". */
+  budget: string | null;
   /** Local days, both ends inclusive, exactly as Productive stores them. */
   startDay: Day;
   endDay: Day;
@@ -31,11 +33,13 @@ export function bookingsOn(bookings: Booking[], day: Day): Booking[] {
   return bookings.filter((b) => b.startDay <= day && day <= b.endDay);
 }
 
-/** "Eurotransplant · Corporate" — the booking's own line. */
+/**
+ * "BHIC · Frontend" — the booking's own line: the company, then the budget the
+ * hours are against (the project's name when the budget is unknown).
+ */
 export function bookingLabel(booking: Booking): string {
-  return booking.client && booking.client !== booking.project
-    ? `${booking.client} · ${booking.project}`
-    : booking.project;
+  const what = booking.budget ?? booking.project;
+  return booking.client && booking.client !== what ? `${booking.client} · ${what}` : what;
 }
 
 export type CapacityKind = "booking" | "meeting" | "task";

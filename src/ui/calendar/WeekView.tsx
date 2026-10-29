@@ -43,7 +43,7 @@ function TasksLaneCell({
 }) {
   const pill = model.pill;
   return (
-    <div className="flex min-h-[44px] flex-col gap-1 border-b border-hairline pb-3.5">
+    <div className="flex min-h-[44px] min-w-0 flex-col gap-1 border-b border-hairline pb-3.5">
       {model.entries.allDayMeetings.map((meeting) => (
         <button
           key={`${meeting.calendarId}-${meeting.id}`}
@@ -104,7 +104,7 @@ export function WeekView({
   drag: BlockDrag;
 }) {
   return (
-    <div className="grid grid-cols-[52px_repeat(5,1fr)] gap-x-2">
+    <div className="grid grid-cols-[52px_repeat(5,minmax(0,1fr))] gap-x-2">
       <span />
       {days.map((model) => (
         <button

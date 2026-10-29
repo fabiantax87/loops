@@ -399,12 +399,13 @@ async function seedBookings(db: SqlDriver, clock: Clock): Promise<void> {
   for (const b of BOOKINGS) {
     await db.execute(
       `INSERT INTO productive_bookings
-         (id, project, client, start_day, end_day, minutes_per_day, note, url, draft, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+         (id, project, client, budget, start_day, end_day, minutes_per_day, note, url, draft, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
       [
         `seed-${nextId++}`,
         b.project,
         b.client,
+        b.project,
         addDays(now, b.from),
         addDays(now, b.to),
         b.hours * 60,

@@ -9,7 +9,7 @@ import { countOf, plural, sentences, spell, spellCapitalised } from "./words";
  * check-in has arrived is amber; everything informational is grey. Deciding it
  * here rather than in each row is what keeps that promise honest.
  */
-export type Tone = "red" | "amber" | "muted" | "grey";
+export type Tone = "red" | "amber" | "green" | "muted" | "grey";
 
 export interface TimeFact {
   text: string;

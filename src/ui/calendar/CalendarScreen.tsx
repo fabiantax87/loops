@@ -201,7 +201,7 @@ export function CalendarScreen() {
   }, [view, clock, sheetOpen]);
 
   return (
-    <div className="flex w-full max-w-[980px] flex-col gap-[30px] py-11">
+    <div className="flex w-full max-w-[1400px] flex-col gap-[30px] py-11">
       <header className="flex items-center gap-5">
         <span className="label flex-1 text-muted">{model.rangeLabel}</span>
         <div className="flex items-center gap-[18px]">

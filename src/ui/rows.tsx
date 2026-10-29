@@ -6,7 +6,7 @@ import {
   type ReactNode,
 } from "react";
 import { items } from "../db/repo";
-import { parseDate } from "../domain/capture";
+import { parseDate, parseTime } from "../domain/capture";
 import { niceDay, type TimeFact } from "../domain/today";
 import type { Item } from "../domain/types";
 import { useClock } from "../lib/ClockContext";
@@ -109,22 +109,25 @@ function PopoverOption({
 
 /**
  * A one-line day field: type "mon", "in 3 days" or "12 sep" and the resolved
- * day shows beside it; ⏎ takes it.
+ * day shows beside it; ⏎ takes it. A time can ride along — "fri 15:00",
+ * "tomorrow 3pm" — and comes back as the second argument, null without one.
  */
 export function DayField({
   autoFocus,
   onPick,
-  placeholder = "mon · in 3 days · 12 sep",
+  placeholder = "mon · fri 15:00 · 12 sep",
 }: {
   autoFocus?: boolean;
-  onPick: (day: Day) => void;
+  onPick: (day: Day, time: string | null) => void;
   placeholder?: string;
 }) {
   const clock = useClock();
   const [text, setText] = useState("");
-  const guess = /^\d{4}-\d{2}-\d{2}$/.test(text.trim())
-    ? { day: text.trim(), phrase: text.trim() }
+  const head = text.trim().split(/\s+/)[0];
+  const guess = /^\d{4}-\d{2}-\d{2}$/.test(head)
+    ? { day: head, phrase: head }
     : parseDate(text, clock);
+  const time = parseTime(text)?.time ?? null;
 
   return (
     <div className="flex items-center gap-2.5">
@@ -136,7 +139,7 @@ export function DayField({
           if (e.key === "Enter" && guess) {
             e.preventDefault();
             e.stopPropagation();
-            onPick(guess.day);
+            onPick(guess.day, time);
           }
         }}
         placeholder={placeholder}
@@ -145,10 +148,11 @@ export function DayField({
       {guess ? (
         <button
           type="button"
-          onClick={() => onPick(guess.day)}
+          onClick={() => onPick(guess.day, time)}
           className="fact text-[11px] text-green transition-colors hover:text-green-hover"
         >
-          {niceDay(guess.day)} ⏎
+          {niceDay(guess.day)}
+          {time && ` · ${time}`} ⏎
         </button>
       ) : (
         text.trim() !== "" && <span className="fact text-[11px] text-faint">?</span>
@@ -172,10 +176,13 @@ export function ReschedulePopover({
   item,
   open,
   onClose,
+  afterAct,
 }: {
   item: Item;
   open: boolean;
   onClose: () => void;
+  /** Runs after a choice writes — a sheet holding the popover closes on it. */
+  afterAct?: () => void;
 }) {
   const clock = useClock();
   const { act } = useStore();
@@ -186,9 +193,11 @@ export function ReschedulePopover({
     if (!open) setPicking(false);
   }, [open]);
 
-  const move = (day: Day) => {
+  // The quick picks keep whatever moment the todo had; a typed day with a
+  // time sets it, a typed day without one leaves it be.
+  const move = (day: Day, time?: string | null) => {
     onClose();
-    void act((db, c) => items.reschedule(db, c, item.id, day));
+    void act((db, c) => items.reschedule(db, c, item.id, day, time ?? undefined)).then(afterAct);
   };
 
   return (
@@ -207,7 +216,7 @@ export function ReschedulePopover({
         />
         {picking ? (
           <div className="px-3 py-2">
-            <DayField autoFocus onPick={move} />
+            <DayField autoFocus onPick={(day, time) => move(day, time)} />
           </div>
         ) : (
           <PopoverOption label="Pick a date…" onClick={() => setPicking(true)} />
@@ -219,7 +228,7 @@ export function ReschedulePopover({
           dim
           onClick={() => {
             onClose();
-            void act((db, c) => items.close(db, c, item.id, "done"));
+            void act((db, c) => items.close(db, c, item.id, "done")).then(afterAct);
           }}
         />
         <PopoverOption
@@ -228,7 +237,7 @@ export function ReschedulePopover({
           dim
           onClick={() => {
             onClose();
-            void act((db, c) => items.demote(db, c, item.id));
+            void act((db, c) => items.demote(db, c, item.id)).then(afterAct);
           }}
         />
       </div>
@@ -244,10 +253,13 @@ export function TheyRepliedPopover({
   item,
   open,
   onClose,
+  afterAct,
 }: {
   item: Item;
   open: boolean;
   onClose: () => void;
+  /** Runs after a choice writes — a sheet holding the popover closes on it. */
+  afterAct?: () => void;
 }) {
   const { act } = useStore();
   const [myMove, setMyMove] = useState(false);
@@ -268,7 +280,7 @@ export function TheyRepliedPopover({
             hint="closes the waiting-on"
             onClick={() => {
               onClose();
-              void act((db, c) => items.settled(db, c, item.id));
+              void act((db, c) => items.settled(db, c, item.id)).then(afterAct);
             }}
           />
           <PopoverOption
@@ -284,12 +296,14 @@ export function TheyRepliedPopover({
           </span>
           <DayField
             autoFocus
-            onPick={(day) => {
+            onPick={(day, time) => {
               onClose();
-              void act((db, c) => items.myMove(db, c, item.id, day));
+              void act((db, c) => items.myMove(db, c, item.id, day, time)).then(afterAct);
             }}
           />
-          <span className="fact text-[11px] text-faint">⏎ make it a todo · esc keep waiting</span>
+          <span className="fact text-[11px] text-faint">
+            ⏎ make it a todo · add a time if it matters · esc keep waiting
+          </span>
         </div>
       )}
     </Popover>
@@ -521,9 +535,9 @@ export function WaitingRow({
             <span className="label text-[10px] tracking-[.12em] text-faint">Check in when?</span>
             <DayField
               autoFocus
-              onPick={(day) => {
+              onPick={(day, time) => {
                 setCheckin(false);
-                void act((db, c) => items.setCheckin(db, c, item.id, day));
+                void act((db, c) => items.setCheckin(db, c, item.id, day, time ?? undefined));
               }}
             />
           </div>

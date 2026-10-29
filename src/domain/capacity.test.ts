@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { fixedClock } from "../lib/clock";
 import { type Booking, buildCalendar, type Meeting } from "./calendar";
 import { clockWords } from "./calendarSummary";
-import { bookingsOn, dayCapacity, durationWords, hoursLabel, totalLabel } from "./capacity";
+import { bookingLabel, bookingsOn, dayCapacity, durationWords, hoursLabel, totalLabel } from "./capacity";
 import type { Snapshot } from "./snapshot";
 import type { Item } from "./types";
 
@@ -43,7 +43,7 @@ function mkItem(overrides: Partial<Item>): Item {
 function mkSnapshot(items: Item[]): Snapshot {
   return {
     clients: [
-      { id: 1, name: "Eurotransplant", notes: null, leading: false, archivedAt: null, createdAt: "" },
+      { id: 1, name: "Eurotransplant", notes: null, email: null, leading: false, archivedAt: null, createdAt: "" },
     ],
     projects: [{ id: 1, clientId: 1, name: "ETRL", status: "active", createdAt: "" }],
     contacts: [],
@@ -77,6 +77,7 @@ function booking(overrides: Partial<Booking>): Booking {
     id: `b${nextId++}`,
     project: "Corporate",
     client: "Eurotransplant",
+    budget: null,
     startDay: "2026-09-14",
     endDay: "2026-09-14",
     minutesPerDay: 360,
@@ -266,5 +267,20 @@ describe("words", () => {
     expect(clockWords(630)).toBe("half past ten");
     expect(clockWords(645)).toBe("quarter to eleven");
     expect(clockWords(620)).toBe("10:20");
+  });
+});
+
+describe("bookingLabel", () => {
+  it("names the company, then the budget", () => {
+    expect(bookingLabel(booking({ client: "BHIC", project: "BHIC website", budget: "Frontend" })))
+      .toBe("BHIC · Frontend");
+  });
+  it("falls back to the project when the budget is unknown", () => {
+    expect(bookingLabel(booking({ client: "Eurotransplant", project: "Corporate" })))
+      .toBe("Eurotransplant · Corporate");
+  });
+  it("does not repeat a company that is its own budget", () => {
+    expect(bookingLabel(booking({ client: "Klokgroep", project: "Klokgroep", budget: "Klokgroep" })))
+      .toBe("Klokgroep");
   });
 });
