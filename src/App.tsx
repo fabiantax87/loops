@@ -96,6 +96,7 @@ function Workspace() {
           ) : screen.name === "client" ? (
             <ClientScreen
               clientId={screen.clientId}
+              onArchived={() => setScreen({ name: "today" })}
               onCapture={(kind) => {
                 const client = clientById(snapshot, screen.clientId);
                 if (!client) return;

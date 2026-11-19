@@ -22,8 +22,6 @@ export interface Client {
   id: number;
   name: string;
   notes: string | null;
-  /** Where mail to them goes — the client page links it. */
-  email: string | null;
   /** You run this one, rather than only working for it — the rail says so. */
   leading: boolean;
   archivedAt: Instant | null;
@@ -50,6 +48,8 @@ export interface Contact {
   projectId: number | null;
   name: string;
   role: string | null;
+  /** Where mail to them goes — the client page links it. */
+  email: string | null;
   createdAt: Instant;
 }
 

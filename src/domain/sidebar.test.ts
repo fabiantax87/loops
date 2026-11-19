@@ -8,7 +8,7 @@ import type { Client, Item } from "./types";
 const clock = fixedClock(new Date(2026, 8, 14, 10, 30));
 
 function client(id: number, name: string): Client {
-  return { id, name, notes: null, email: null, leading: false, archivedAt: null, createdAt: "" };
+  return { id, name, notes: null, leading: false, archivedAt: null, createdAt: "" };
 }
 
 let nextId = 1;
@@ -42,7 +42,13 @@ function item(overrides: Partial<Item>): Item {
 }
 
 const snapshot: Snapshot = {
-  clients: [client(1, "Late"), client(2, "Today"), client(3, "Quiet"), client(4, "Checkin")],
+  clients: [
+    client(1, "Late"),
+    client(2, "Today"),
+    client(3, "Quiet"),
+    client(4, "Checkin"),
+    client(5, "PickedUp"),
+  ],
   projects: [],
   contacts: [],
   items: [
@@ -52,6 +58,7 @@ const snapshot: Snapshot = {
     item({ clientId: 3, deadline: "2026-09-20" }),
     item({ clientId: 3, deadline: "2026-09-14", status: "closed", outcome: "done" }),
     item({ clientId: 4, kind: "waiting", sentOn: "2026-09-10", checkinOn: "2026-09-14" }),
+    item({ clientId: 5, deadline: null, startedOn: "2026-09-14" }),
   ],
   ideasOfDay: null,
 };
@@ -69,6 +76,11 @@ describe("clientSignals", () => {
     expect(byName.Today.tone).toBe("green");
     expect(byName.Today.badge).toBeNull();
     expect(byName.Today.fine).toBe(true);
+  });
+
+  it("goes green for a todo picked up from an idea — it has no date, so it is today's", () => {
+    expect(byName.PickedUp.tone).toBe("green");
+    expect(byName.PickedUp.badge).toBeNull();
   });
 
   it("goes amber, not green, for a check-in that is due", () => {

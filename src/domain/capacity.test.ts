@@ -43,7 +43,7 @@ function mkItem(overrides: Partial<Item>): Item {
 function mkSnapshot(items: Item[]): Snapshot {
   return {
     clients: [
-      { id: 1, name: "Eurotransplant", notes: null, email: null, leading: false, archivedAt: null, createdAt: "" },
+      { id: 1, name: "Eurotransplant", notes: null, leading: false, archivedAt: null, createdAt: "" },
     ],
     projects: [{ id: 1, clientId: 1, name: "ETRL", status: "active", createdAt: "" }],
     contacts: [],

@@ -71,7 +71,9 @@ function ClientBand({
           >
             <span className={`h-1.5 w-1.5 flex-none rounded-full ${DOT[tone]}`} />
             <span
-              className={`flex-1 truncate text-[15px] ${fine ? "text-sleeping" : "text-text"}`}
+              className={`flex-1 truncate text-[15px] ${
+                fine && tone !== "green" ? "text-sleeping" : "text-text"
+              }`}
             >
               {client.name}
             </span>

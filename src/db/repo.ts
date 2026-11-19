@@ -17,7 +17,6 @@ function client(r: Row): Client {
     id: r.id,
     name: r.name,
     notes: r.notes,
-    email: r.email ?? null,
     leading: !!r.leading,
     archivedAt: r.archived_at,
     createdAt: r.created_at,
@@ -41,6 +40,7 @@ function contact(r: Row): Contact {
     projectId: r.project_id,
     name: r.name,
     role: r.role,
+    email: r.email ?? null,
     createdAt: r.created_at,
   };
 }
@@ -116,13 +116,11 @@ export const clients = {
     clock: Clock,
     input: {
       name: string;
-      email?: string | null;
       projects: string[];
       contacts: { name: string; role?: string | null; projectName?: string | null }[];
     },
   ): Promise<number> {
     const clientId = await clients.create(db, clock, input.name);
-    if (input.email?.trim()) await clients.setEmail(db, clientId, input.email);
     const byName = new Map<string, number>();
     for (const name of input.projects) {
       const trimmed = name.trim();
@@ -146,11 +144,6 @@ export const clients = {
 
   async rename(db: SqlDriver, id: number, name: string): Promise<void> {
     await db.execute("UPDATE clients SET name = ? WHERE id = ?", [name.trim(), id]);
-  },
-
-  /** Where mail to them goes. Empty clears it. */
-  async setEmail(db: SqlDriver, id: number, email: string | null): Promise<void> {
-    await db.execute("UPDATE clients SET email = ? WHERE id = ?", [email?.trim() || null, id]);
   },
 
   /** Whether this is a client you lead. The rail gives those their own band. */
@@ -197,15 +190,22 @@ export const contacts = {
   async create(
     db: SqlDriver,
     clock: Clock,
-    input: { clientId: number; projectId?: number | null; name: string; role?: string },
+    input: {
+      clientId: number;
+      projectId?: number | null;
+      name: string;
+      role?: string;
+      email?: string | null;
+    },
   ): Promise<number> {
     const { lastInsertId } = await db.execute(
-      "INSERT INTO contacts (client_id, project_id, name, role, created_at) VALUES (?, ?, ?, ?, ?)",
+      "INSERT INTO contacts (client_id, project_id, name, role, email, created_at) VALUES (?, ?, ?, ?, ?, ?)",
       [
         input.clientId,
         input.projectId ?? null,
         input.name.trim(),
         input.role?.trim() || null,
+        input.email?.trim() || null,
         nowInstant(clock),
       ],
     );
@@ -216,7 +216,12 @@ export const contacts = {
   async edit(
     db: SqlDriver,
     id: number,
-    fields: { name?: string; role?: string | null; projectId?: number | null },
+    fields: {
+      name?: string;
+      role?: string | null;
+      projectId?: number | null;
+      email?: string | null;
+    },
   ): Promise<void> {
     const sets: string[] = [];
     const params: unknown[] = [];
@@ -227,6 +232,10 @@ export const contacts = {
     if (fields.role !== undefined) {
       sets.push("role = ?");
       params.push(fields.role?.trim() || null);
+    }
+    if (fields.email !== undefined) {
+      sets.push("email = ?");
+      params.push(fields.email?.trim() || null);
     }
     if (fields.projectId !== undefined) {
       sets.push("project_id = ?");
@@ -332,6 +341,23 @@ export const items = {
     sets.push("updated_at = ?");
     params.push(nowInstant(clock), id);
     await db.execute(`UPDATE items SET ${sets.join(", ")} WHERE id = ?`, params);
+  },
+
+  /**
+   * Filed under the wrong client or project — it happens. Everything else
+   * about the item stays; a contact only survives when the client does.
+   */
+  async move(
+    db: SqlDriver,
+    clock: Clock,
+    id: number,
+    to: { clientId: number; projectId: number | null; contactId: number | null },
+  ): Promise<void> {
+    await db.execute(
+      `UPDATE items SET client_id = ?, project_id = ?, contact_id = ?, updated_at = ?
+       WHERE id = ?`,
+      [to.clientId, to.projectId, to.contactId, nowInstant(clock), id],
+    );
   },
 
   async close(

@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { SqlDriver } from "./driver";
 import { createTestDb } from "../test/sqlite";
+import { fixedClock } from "../lib/clock";
+import { contacts, items, projects } from "./repo";
 
 let db: SqlDriver;
 
@@ -146,5 +148,58 @@ describe("items", () => {
     await db.execute("DELETE FROM clients WHERE id = ?", [c]);
     const rows = await db.select<{ n: number }>("SELECT count(*) AS n FROM items");
     expect(rows[0].n).toBe(0);
+  });
+});
+
+describe("moving an item", () => {
+  const clock = fixedClock("2026-09-14T10:30:00.000Z");
+
+  it("changes client and project, and leaves the contact behind", async () => {
+    const from = await client("Ravel");
+    const to = await client("Eurotransplant");
+    const project = await projects.create(db, clock, to, "Portal");
+    const person = await contacts.create(db, clock, {
+      clientId: from,
+      name: "John",
+      email: "john@ravel.nl",
+    });
+    const id = await insertItem({ client_id: from, contact_id: person });
+
+    await items.move(db, clock, id, { clientId: to, projectId: project, contactId: null });
+
+    const [row] = await db.select<{ client_id: number; project_id: number; contact_id: null }>(
+      "SELECT client_id, project_id, contact_id FROM items WHERE id = ?",
+      [id],
+    );
+    expect(row).toEqual({ client_id: to, project_id: project, contact_id: null });
+  });
+
+  it("keeps the contact when only the project changes", async () => {
+    const c = await client();
+    const project = await projects.create(db, clock, c, "Portal");
+    const person = await contacts.create(db, clock, { clientId: c, name: "John" });
+    const id = await insertItem({ client_id: c, contact_id: person });
+
+    await items.move(db, clock, id, { clientId: c, projectId: project, contactId: person });
+
+    const [row] = await db.select<{ project_id: number; contact_id: number }>(
+      "SELECT project_id, contact_id FROM items WHERE id = ?",
+      [id],
+    );
+    expect(row).toEqual({ project_id: project, contact_id: person });
+  });
+});
+
+describe("contacts", () => {
+  const clock = fixedClock("2026-09-14T10:30:00.000Z");
+
+  it("carry an email of their own, which edit can clear again", async () => {
+    const c = await client();
+    const id = await contacts.create(db, clock, { clientId: c, name: "John", email: " john@ravel.nl " });
+    const read = async () =>
+      (await db.select<{ email: string | null }>("SELECT email FROM contacts WHERE id = ?", [id]))[0].email;
+    expect(await read()).toBe("john@ravel.nl");
+    await contacts.edit(db, id, { email: "" });
+    expect(await read()).toBeNull();
   });
 });

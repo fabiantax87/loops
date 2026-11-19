@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { items } from "../db/repo";
+import { attribution, projectsOf } from "../domain/snapshot";
 import type { Item } from "../domain/types";
-import { useStore } from "../state/store";
+import { useSnapshot, useStore } from "../state/store";
+import { Select } from "./primitives";
 
 /* An item's notes: the paragraph behind the sentence. Edited in a small sheet,
    shown under the title with any links made clickable. */
@@ -122,6 +124,95 @@ export function EditItemSheet({ item, onClose }: { item: Item; onClose: () => vo
             Save
           </button>
           <span className="fact text-[11px] text-faint">⌘⏎ save · esc dismiss</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Filed under the wrong client or project. The item itself is untouched; its
+ * contact only comes along when the client stays the same, since people
+ * belong to one client.
+ */
+export function MoveItemSheet({ item, onClose }: { item: Item; onClose: () => void }) {
+  const snapshot = useSnapshot();
+  const { act } = useStore();
+  const [clientId, setClientId] = useState(item.clientId);
+  const [projectId, setProjectId] = useState<number | null>(item.projectId);
+  const clients = snapshot.clients.filter((c) => c.archivedAt === null || c.id === item.clientId);
+  const projects = projectsOf(snapshot, clientId);
+  const changed = clientId !== item.clientId || projectId !== item.projectId;
+
+  const save = () => {
+    if (!changed) return;
+    void act((db, c) =>
+      items.move(db, c, item.id, {
+        clientId,
+        projectId,
+        contactId: clientId === item.clientId ? item.contactId : null,
+      }),
+    ).then(onClose);
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center bg-ink/70 pt-[20vh]"
+      onMouseDown={onClose}
+    >
+      <div
+        className="flex w-[480px] flex-col gap-4 rounded-xl border border-[#313734] bg-hover p-6 shadow-[0_22px_55px_rgba(0,0,0,.55)]"
+        onMouseDown={(e) => e.stopPropagation()}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") onClose();
+          if (e.key === "Enter") save();
+        }}
+      >
+        <span className="label text-faint">Move</span>
+        <div className="flex flex-col gap-1">
+          <span className="truncate text-[17px] text-text">{item.title}</span>
+          <span className="fact text-[11px] text-faint">now under {attribution(snapshot, item)}</span>
+        </div>
+        <div className="flex gap-2.5">
+          <Select
+            label="Client"
+            className="flex-1"
+            value={String(clientId)}
+            choices={clients.map((c) => ({ value: String(c.id), label: c.name }))}
+            onChange={(value) => {
+              setClientId(Number(value));
+              setProjectId(null);
+            }}
+          />
+          <Select
+            label="Project"
+            className="flex-1"
+            value={projectId === null ? "" : String(projectId)}
+            disabled={projects.length === 0}
+            choices={[
+              { value: "", label: projects.length === 0 ? "No projects" : "No project" },
+              ...projects.map((p) => ({
+                value: String(p.id),
+                label: p.status === "done" ? `${p.name} (done)` : p.name,
+              })),
+            ]}
+            onChange={(value) => setProjectId(value === "" ? null : Number(value))}
+          />
+        </div>
+        <div className="flex items-center gap-4 pt-1">
+          <button
+            type="button"
+            onClick={save}
+            disabled={!changed}
+            className="rounded-lg bg-green px-4 py-2 text-sm text-ink transition-colors hover:bg-green-hover disabled:opacity-40"
+          >
+            Move
+          </button>
+          <span className="fact text-[11px] text-faint">
+            {clientId !== item.clientId && item.contactId !== null
+              ? "its contact stays behind — they belong to the old client"
+              : "⏎ move · esc dismiss"}
+          </span>
         </div>
       </div>
     </div>

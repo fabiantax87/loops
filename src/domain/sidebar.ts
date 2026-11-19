@@ -14,7 +14,10 @@ export interface ClientSignal {
   client: Client;
   late: number;
   owed: number;
-  /** Open todos due today and check-ins falling today — the green dot. */
+  /**
+   * Open todos due today — a picked-up idea has no date and is today's by
+   * definition — and check-ins falling today. The green dot.
+   */
   today: number;
   /** The one word the sidebar shows, or null when the client is fine. */
   badge: string | null;
@@ -39,7 +42,7 @@ export function clientSignals(snapshot: Snapshot, clock: Clock): ClientSignal[] 
       ).length;
       const todayCount = open.filter(
         (i) =>
-          (i.kind === "todo" && i.deadline === now) ||
+          (i.kind === "todo" && (i.deadline === now || i.deadline === null)) ||
           (i.kind === "waiting" && i.checkinOn === now),
       ).length;
 

@@ -12,7 +12,7 @@ import type { Item } from "../domain/types";
 import { useClock } from "../lib/ClockContext";
 import { type Day, addDays, today } from "../lib/time";
 import { useStore } from "../state/store";
-import { EditItemSheet, NoteLine } from "./notes";
+import { EditItemSheet, MoveItemSheet, NoteLine } from "./notes";
 import { Fact, InlineVerb, RowMenu, type MenuItem } from "./primitives";
 
 /* The rows. Every kind of item renders as a sentence with its verbs beside it:
@@ -384,6 +384,7 @@ export function TodoRow({
   const { act } = useStore();
   const [rescheduling, setRescheduling] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [moving, setMoving] = useState(false);
 
   return (
     <RowShell
@@ -410,7 +411,11 @@ export function TodoRow({
       )}
       <div className="relative">
         <RowMenu
-          items={todoMenu(item, act, () => setRescheduling(true), () => setEditing(true))}
+          items={todoMenu(item, act, {
+            reschedule: () => setRescheduling(true),
+            edit: () => setEditing(true),
+            move: () => setMoving(true),
+          })}
         />
         <ReschedulePopover
           item={item}
@@ -419,6 +424,7 @@ export function TodoRow({
         />
       </div>
       {editing && <EditItemSheet item={item} onClose={() => setEditing(false)} />}
+      {moving && <MoveItemSheet item={item} onClose={() => setMoving(false)} />}
     </RowShell>
   );
 }
@@ -436,6 +442,7 @@ export function CriticalRow({
   const { act } = useStore();
   const [rescheduling, setRescheduling] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [moving, setMoving] = useState(false);
 
   return (
     <div className="mb-1.5 flex items-center gap-[18px] rounded-[10px] border border-[#40251f] bg-[#1a1210] px-[22px] py-[19px]">
@@ -463,6 +470,7 @@ export function CriticalRow({
       <RowMenu
         items={[
           { label: "Edit…", onSelect: () => setEditing(true) },
+          { label: "Move…", onSelect: () => setMoving(true) },
           {
             label: "It's done",
             onSelect: () => act((db, c) => items.close(db, c, item.id, "done")),
@@ -479,6 +487,7 @@ export function CriticalRow({
         ]}
       />
       {editing && <EditItemSheet item={item} onClose={() => setEditing(false)} />}
+      {moving && <MoveItemSheet item={item} onClose={() => setMoving(false)} />}
     </div>
   );
 }
@@ -501,6 +510,7 @@ export function WaitingRow({
   const [replied, setReplied] = useState(false);
   const [checkin, setCheckin] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [moving, setMoving] = useState(false);
 
   return (
     <RowShell title={item.title} notes={item.notes} where={where} last={last} onOpen={onOpen}>
@@ -522,6 +532,7 @@ export function WaitingRow({
         <RowMenu
           items={[
             { label: "Edit…", onSelect: () => setEditing(true) },
+            { label: "Move…", onSelect: () => setMoving(true) },
             { label: "Set a check-in…", onSelect: () => setCheckin(true) },
             {
               label: "Drop it — it won't come",
@@ -544,6 +555,7 @@ export function WaitingRow({
         </Popover>
       </div>
       {editing && <EditItemSheet item={item} onClose={() => setEditing(false)} />}
+      {moving && <MoveItemSheet item={item} onClose={() => setMoving(false)} />}
     </RowShell>
   );
 }
@@ -564,6 +576,7 @@ export function IdeaRow({
 }) {
   const { act } = useStore();
   const [editing, setEditing] = useState(false);
+  const [moving, setMoving] = useState(false);
   return (
     <RowShell title={item.title} notes={item.notes} where={where} last={last} onOpen={onOpen}>
       {wasInProgress && <WasInProgressBadge />}
@@ -581,8 +594,14 @@ export function IdeaRow({
       >
         Not relevant
       </button>
-      <RowMenu items={[{ label: "Edit…", onSelect: () => setEditing(true) }]} />
+      <RowMenu
+        items={[
+          { label: "Edit…", onSelect: () => setEditing(true) },
+          { label: "Move…", onSelect: () => setMoving(true) },
+        ]}
+      />
       {editing && <EditItemSheet item={item} onClose={() => setEditing(false)} />}
+      {moving && <MoveItemSheet item={item} onClose={() => setMoving(false)} />}
     </RowShell>
   );
 }
@@ -590,14 +609,14 @@ export function IdeaRow({
 function todoMenu(
   item: Item,
   act: ReturnType<typeof useStore>["act"],
-  reschedule: () => void,
-  edit: () => void,
+  open: { reschedule: () => void; edit: () => void; move: () => void },
 ): MenuItem[] {
   return [
-    { label: "Edit…", onSelect: edit },
+    { label: "Edit…", onSelect: open.edit },
+    { label: "Move…", onSelect: open.move },
     {
       label: item.deadline === null ? "Give it a deadline…" : "Reschedule…",
-      onSelect: reschedule,
+      onSelect: open.reschedule,
     },
     {
       label: "Turn it into an idea",

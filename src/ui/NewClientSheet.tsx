@@ -22,7 +22,6 @@ export function NewClientSheet({
   const { act } = useStore();
   const [step, setStep] = useState<"name" | "grow">("name");
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
   const [projects, setProjects] = useState<string[]>([]);
   const [projectDraft, setProjectDraft] = useState("");
   const [contacts, setContacts] = useState<DraftContact[]>([]);
@@ -56,7 +55,6 @@ export function NewClientSheet({
     void act(async (db, c) => {
       created = await clients.createFull(db, c, {
         name,
-        email: email.trim() || null,
         projects: allProjects,
         contacts: allContacts.map((person) => {
           // "Webshop · lead" — the first part is a project if it names one.
@@ -105,16 +103,7 @@ export function NewClientSheet({
               </span>
             </>
           ) : (
-            <>
-              <span className="text-2xl text-text">{name}</span>
-              <input
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                type="email"
-                placeholder="Email (optional)"
-                className="w-full border-b border-outline bg-transparent pb-2 text-[15px] text-text outline-none placeholder:text-faint focus:border-outline-hover"
-              />
-            </>
+            <span className="text-2xl text-text">{name}</span>
           )}
         </div>
 
