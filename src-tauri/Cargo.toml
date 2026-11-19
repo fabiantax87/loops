@@ -44,3 +44,11 @@ tauri-plugin-updater = "2"
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3", features = ["NSApplication", "NSResponder"] }
 
+
+# Keep the debug build cache small: line numbers in backtraces for our own
+# code, no debug info at all for dependencies.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
