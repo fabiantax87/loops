@@ -37,6 +37,7 @@ function item(overrides: Partial<Item>): Item {
     createdAt: "",
     updatedAt: "",
     closedAt: null,
+    pullKey: null,
     ...overrides,
   };
 }
@@ -60,6 +61,8 @@ const snapshot: Snapshot = {
     item({ clientId: 4, kind: "waiting", sentOn: "2026-09-10", checkinOn: "2026-09-14" }),
     item({ clientId: 5, deadline: null, startedOn: "2026-09-14" }),
   ],
+  repos: [],
+  pulls: [],
   ideasOfDay: null,
 };
 

@@ -60,6 +60,16 @@ try {
 db.exec("PRAGMA foreign_keys = ON");
 const driver = new NodeDriver(db);
 
+// The schema is the app's to apply (the Rust plugin keeps its own ledger of
+// migrations), so a database it hasn't caught up yet is left well alone.
+const columns = await driver.select<{ name: string }>("PRAGMA table_info(items)");
+if (!columns.some((c) => c.name === "pull_key")) {
+  console.error(
+    `${path} is behind the current schema.\nRun the app once (\`pnpm tauri dev\`) so it migrates the database, then try again.`,
+  );
+  process.exit(1);
+}
+
 const reset = process.argv.includes("--reset");
 const [{ n }] = await driver.select<{ n: number }>("SELECT count(*) AS n FROM clients");
 if (n > 0 && !reset) {
@@ -76,6 +86,15 @@ if (reset && n > 0) {
   // append-only, and only a cascade from a departing parent may clear them.
   await driver.execute("DELETE FROM clients");
   await driver.execute("DELETE FROM app_meta");
+  // The borrowed-data caches hang off nothing, so they go by name.
+  for (const table of [
+    "github_pulls",
+    "google_events",
+    "google_calendars",
+    "productive_bookings",
+  ]) {
+    await driver.execute(`DELETE FROM ${table}`);
+  }
   console.log(`Cleared ${n} clients and everything hanging off them.`);
 }
 

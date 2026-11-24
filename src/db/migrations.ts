@@ -11,6 +11,7 @@ import productive0010 from "../../src-tauri/migrations/0010_productive.sql?raw";
 import clientEmail0011 from "../../src-tauri/migrations/0011_client_email.sql?raw";
 import bookingBudget0012 from "../../src-tauri/migrations/0012_booking_budget.sql?raw";
 import contactEmail0013 from "../../src-tauri/migrations/0013_contact_email.sql?raw";
+import github0014 from "../../src-tauri/migrations/0014_github.sql?raw";
 import type { SqlDriver } from "./driver";
 
 export interface Migration {
@@ -39,6 +40,7 @@ export const MIGRATIONS: Migration[] = [
   { version: 11, name: "clients learn an email address", sql: clientEmail0011 },
   { version: 12, name: "bookings remember their budget", sql: bookingBudget0012 },
   { version: 13, name: "contacts learn an email address", sql: contactEmail0013 },
+  { version: 14, name: "GitHub pull requests, per project", sql: github0014 },
 ];
 
 export async function applyMigrations(driver: SqlDriver): Promise<number[]> {

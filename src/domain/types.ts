@@ -85,4 +85,34 @@ export interface Item {
   createdAt: Instant;
   updatedAt: Instant;
   closedAt: Instant | null;
+  /** 'owner/name#123' on a todo a pull request made for itself; null otherwise. */
+  pullKey: string | null;
+}
+
+/** A repository that answers to a project. One project per repository. */
+export interface ProjectRepo {
+  /** 'owner/name', compared without regard to case. */
+  repo: string;
+  projectId: number;
+}
+
+/**
+ * An open pull request that is yours to move: you wrote it, it is assigned to
+ * you, or somebody asked for your review. GitHub owns it; this is a cache.
+ */
+export interface Pull {
+  /** 'owner/name#123' — also what a todo's `pullKey` points at. */
+  key: string;
+  repo: string;
+  number: number;
+  title: string;
+  url: string;
+  author: string | null;
+  authored: boolean;
+  assigned: boolean;
+  reviewRequested: boolean;
+  draft: boolean;
+  openedAt: Instant;
+  /** GitHub's own "last activity", not when the cache was written. */
+  updatedAt: Instant;
 }

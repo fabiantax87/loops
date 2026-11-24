@@ -94,10 +94,13 @@ export function Rail({
   screen,
   go,
   onNewClient,
+  onSettings,
 }: {
   screen: Screen;
   go: (screen: Screen) => void;
   onNewClient: () => void;
+  /** Connections and updates live behind one door. */
+  onSettings: () => void;
 }) {
   const snapshot = useSnapshot();
   const clock = useClock();
@@ -143,6 +146,13 @@ export function Rail({
           className="w-full rounded-[7px] px-[13px] py-[9px] text-left text-sm text-muted transition-colors hover:bg-chrome hover:text-text"
         >
           New client
+        </button>
+        <button
+          type="button"
+          onClick={onSettings}
+          className="w-full rounded-[7px] px-[13px] py-[9px] text-left text-sm text-muted transition-colors hover:bg-chrome hover:text-text"
+        >
+          Settings
         </button>
       </div>
     </nav>

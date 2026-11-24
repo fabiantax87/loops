@@ -36,6 +36,7 @@ function mkItem(overrides: Partial<Item>): Item {
     createdAt: new Date(2026, 8, 1, 9).toISOString(),
     updatedAt: new Date(2026, 8, 1, 9).toISOString(),
     closedAt: null,
+    pullKey: null,
     ...overrides,
   };
 }
@@ -48,6 +49,8 @@ function mkSnapshot(items: Item[]): Snapshot {
     projects: [{ id: 1, clientId: 1, name: "ETRL", status: "active", createdAt: "" }],
     contacts: [],
     items,
+    repos: [],
+    pulls: [],
     ideasOfDay: null,
   };
 }

@@ -17,9 +17,15 @@ export interface UpdateState {
 const RECHECK_MS = 4 * 60 * 60 * 1000;
 const NOTICE_MS = 4 * 1000;
 
-export function useUpdater(): { update: UpdateState; restart: () => void } {
+export function useUpdater(): {
+  update: UpdateState;
+  restart: () => void;
+  /** The same check the tray menu runs, asked for from Settings. */
+  check: () => void;
+} {
   const [update, setUpdate] = useState<UpdateState>({ phase: "idle", version: null });
   const busy = useRef(false);
+  const manual = useRef<() => void>(() => undefined);
 
   useEffect(() => {
     if (!("__TAURI_INTERNALS__" in window)) return;
@@ -65,6 +71,7 @@ export function useUpdater(): { update: UpdateState; restart: () => void } {
       }
     };
 
+    manual.current = () => void look(true);
     void look(false);
     const timer = window.setInterval(() => void look(false), RECHECK_MS);
 
@@ -86,5 +93,5 @@ export function useUpdater(): { update: UpdateState; restart: () => void } {
     void import("@tauri-apps/plugin-process").then(({ relaunch }) => relaunch());
   };
 
-  return { update, restart };
+  return { update, restart, check: () => manual.current() };
 }

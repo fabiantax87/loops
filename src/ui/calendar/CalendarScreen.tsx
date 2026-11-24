@@ -25,8 +25,6 @@ import { useSnapshot, useStore } from "../../state/store";
 import type { Clock } from "../../lib/clock";
 import { BookingDetail, CapacityStrip, DayTotalDetail } from "./Capacity";
 import { AllDayShelf } from "./DayView";
-import { CalendarSettingsSheet, ConnectSheet } from "./ConnectGoogle";
-import { ConnectProductiveSheet, ProductiveSettingsSheet } from "./ConnectProductive";
 import {
   DAY_PX_PER_HOUR,
   DayColumn,
@@ -92,7 +90,7 @@ function phaseLabel(
   return lastSync ? agoLabel(lastSync, clock) : "";
 }
 
-export function CalendarScreen() {
+export function CalendarScreen({ onOpenSettings }: { onOpenSettings: () => void }) {
   const snapshot = useSnapshot();
   const clock = useClock();
   const { db } = useStore();
@@ -102,12 +100,8 @@ export function CalendarScreen() {
   const [opened, setOpened] = useState<Meeting | null>(null);
   const [viewing, setViewing] = useState<TaskEntry | null>(null);
   const [editing, setEditing] = useState<TaskEntry | null>(null);
-  const [connecting, setConnecting] = useState(false);
-  const [settings, setSettings] = useState(false);
   const [booking, setBooking] = useState<Booking | null>(null);
   const [total, setTotal] = useState(false);
-  const [connectingProductive, setConnectingProductive] = useState(false);
-  const [productiveSettings, setProductiveSettings] = useState(false);
   const { act } = useStore();
 
   const open = (content: BlockContent) => {
@@ -181,11 +175,7 @@ export function CalendarScreen() {
     viewing !== null ||
     editing !== null ||
     booking !== null ||
-    total ||
-    connecting ||
-    settings ||
-    connectingProductive ||
-    productiveSettings;
+    total;
   useEffect(() => {
     if (sheetOpen) return;
     const onKey = (event: KeyboardEvent) => {
@@ -317,7 +307,7 @@ export function CalendarScreen() {
           ) : connection.phase === "disconnected" ? (
             <button
               type="button"
-              onClick={() => setConnecting(true)}
+              onClick={onOpenSettings}
               className="fact text-[11px] text-green transition-colors hover:text-green-hover"
             >
               connect…
@@ -333,7 +323,7 @@ export function CalendarScreen() {
               </span>
               <button
                 type="button"
-                onClick={() => setSettings(true)}
+                onClick={onOpenSettings}
                 className="fact text-[11px] text-faint transition-colors hover:text-text"
               >
                 settings
@@ -356,7 +346,7 @@ export function CalendarScreen() {
                 </span>
                 <button
                   type="button"
-                  onClick={() => setConnectingProductive(true)}
+                  onClick={onOpenSettings}
                   className="fact text-[11px] text-green transition-colors hover:text-green-hover"
                 >
                   Reconnect
@@ -365,7 +355,7 @@ export function CalendarScreen() {
             ) : (
               <button
                 type="button"
-                onClick={() => setConnectingProductive(true)}
+                onClick={onOpenSettings}
                 className="fact text-[11px] text-green transition-colors hover:text-green-hover"
               >
                 connect…
@@ -387,7 +377,7 @@ export function CalendarScreen() {
               </span>
               <button
                 type="button"
-                onClick={() => setProductiveSettings(true)}
+                onClick={onOpenSettings}
                 className="fact text-[11px] text-faint transition-colors hover:text-text"
               >
                 settings
@@ -420,22 +410,6 @@ export function CalendarScreen() {
           onOpenBlock={open}
           onClose={() => setTotal(false)}
         />
-      )}
-      {connectingProductive && (
-        <ConnectProductiveSheet
-          connection={productive}
-          onClose={() => setConnectingProductive(false)}
-        />
-      )}
-      {productiveSettings && (
-        <ProductiveSettingsSheet
-          connection={productive}
-          onClose={() => setProductiveSettings(false)}
-        />
-      )}
-      {connecting && <ConnectSheet connection={connection} onClose={() => setConnecting(false)} />}
-      {settings && (
-        <CalendarSettingsSheet connection={connection} onClose={() => setSettings(false)} />
       )}
     </div>
   );

@@ -162,6 +162,7 @@ describe("routing by name", () => {
       createdAt: "2026-08-01T09:00:00.000Z",
       updatedAt: "2026-08-01T09:00:00.000Z",
       closedAt: null,
+      pullKey: null,
     };
     const guess = parseCapture("ask about the staging window", { ...snapshot, items: [item] }, clock);
     expect(guess.client?.name).toBe("Eurotransplant");

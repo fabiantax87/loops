@@ -90,11 +90,18 @@ fn migrations() -> Vec<Migration> {
             sql: include_str!("../migrations/0013_contact_email.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 14,
+            description: "GitHub pull requests, per project",
+            sql: include_str!("../migrations/0014_github.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
 /// The keychain entries live under one service name; the key names the secret.
-/// The Google Calendar refresh token and the Productive API token live here.
+/// The Google Calendar refresh token, the Productive API token and the GitHub
+/// token live here.
 const KEYCHAIN_SERVICE: &str = "nl.linku.loops";
 
 #[tauri::command]

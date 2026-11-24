@@ -2,19 +2,42 @@ import { useState } from "react";
 import {
   clients as clientRepo,
   contacts as contactRepo,
+  githubPulls,
+  projectRepos,
   projects as projectRepo,
 } from "../db/repo";
 import { buildClientPage, shortProjectName } from "../domain/clientPage";
-import { clientById, projectById, projectsOf } from "../domain/snapshot";
+import { parseRepos } from "../domain/repos";
+import { clientById, projectById, projectOfRepo, projectsOf, reposOf } from "../domain/snapshot";
 import type { Client, Contact, ItemKind, Project } from "../domain/types";
+import type { Tone } from "../domain/today";
 import { useClock } from "../lib/ClockContext";
 import { useSnapshot, useStore } from "../state/store";
 import { openExternal } from "./notes";
-import { BandLabel, RowMenu } from "./primitives";
+import { BandLabel, Fact, RowMenu } from "./primitives";
 import { CriticalRow, IdeaRow, TodoRow, WaitingRow } from "./rows";
 
 /** Loose on purpose: something@somewhere.tld, and nothing stricter. */
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** What the lower half of the page is showing. */
+type ClientTab = ItemKind | "pulls";
+
+/** A tab's number takes the colour of the worst thing behind it. */
+const COUNT: Record<Tone, string> = {
+  red: "text-red",
+  amber: "text-amber",
+  green: "text-green",
+  muted: "text-muted",
+  grey: "text-soft",
+};
+
+const EMPTY: Record<ClientTab, string> = {
+  todo: "Nothing you owe them. ⌘⇧L when there is.",
+  waiting: "Nobody here owes you an answer.",
+  idea: "No loose thoughts for this client.",
+  pulls: "No open pull requests are waiting on you here.",
+};
 
 const DOT: Record<string, string> = {
   red: "bg-red",
@@ -49,6 +72,40 @@ export function ClientScreen({
   const [addingProject, setAddingProject] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [editingClient, setEditingClient] = useState(false);
+  const [chosenTab, setChosenTab] = useState<ClientTab | null>(null);
+
+  const pullCount = model.pulls.reduce((n, group) => n + group.rows.length, 0);
+  const projectIds = new Set(model.projects.map((p) => p.project.id));
+  const tabs: { id: ClientTab; label: string; count: number; tone: Tone }[] = [
+    {
+      id: "todo",
+      label: "Todos",
+      count: model.todos.length,
+      tone: model.todos.some((r) => r.critical) ? "red" : "grey",
+    },
+    {
+      id: "waiting",
+      label: "Waiting on them",
+      count: model.waiting.length,
+      tone: model.waiting.some((r) => r.chaseDue) ? "amber" : "grey",
+    },
+    { id: "idea", label: "Ideas", count: model.ideas.length, tone: "grey" },
+  ];
+  // Pull requests only get a tab once this client has a repository to watch.
+  if (pullCount > 0 || snapshot.repos.some((r) => projectIds.has(r.projectId))) {
+    tabs.push({
+      id: "pulls",
+      label: "Pull requests",
+      count: pullCount,
+      tone: model.pulls.some((g) => g.rows.some((r) => r.fact.tone === "red")) ? "red" : "grey",
+    });
+  }
+  // Until a tab is picked, open on the first one with something in it. The
+  // pick carries across clients; one that has no such tab falls back the same way.
+  const tab: ClientTab =
+    chosenTab && tabs.some((t) => t.id === chosenTab)
+      ? chosenTab
+      : (tabs.find((t) => t.count > 0)?.id ?? "todo");
 
   return (
     <div className="flex w-[720px] flex-col gap-[52px] pt-14 pb-[72px]">
@@ -165,81 +222,125 @@ export function ClientScreen({
         </div>
       </div>
 
-      <div className="flex gap-[22px] border-b border-hairline pb-0.5">
-        {(
-          [
-            ["New todo", "todo"],
-            ["New idea", "idea"],
-            ["New waiting-on", "waiting"],
-          ] as [string, ItemKind][]
-        ).map(([label, kind]) => (
-          <button
-            key={kind}
-            type="button"
-            onClick={() => onCapture(kind)}
-            className="pb-3.5 text-sm text-soft transition-colors hover:text-text"
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <section className="flex flex-col">
+        <div role="tablist" className="flex items-end gap-[26px] border-b border-hairline">
+          {tabs.map(({ id, label, count, tone }) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={id === tab}
+              onClick={() => setChosenTab(id)}
+              className={`-mb-px flex items-baseline gap-2 border-b pb-3.5 text-sm transition-colors ${
+                id === tab
+                  ? "border-text text-text"
+                  : "border-transparent text-muted hover:text-text"
+              }`}
+            >
+              {label}
+              <span
+                className={`fact flex h-[19px] min-w-[19px] items-center justify-center self-center rounded-full bg-[#212624] px-[5px] text-[10.5px] leading-none ${COUNT[tone]}`}
+              >
+                {count}
+              </span>
+            </button>
+          ))}
+          {/* The one thing to add is whatever the open tab holds. */}
+          {tab !== "pulls" && (
+            <button
+              type="button"
+              onClick={() => onCapture(tab)}
+              className="ml-auto pb-3.5 text-sm text-soft transition-colors hover:text-text"
+            >
+              {tab === "todo" ? "New todo" : tab === "waiting" ? "New waiting-on" : "New idea"}
+            </button>
+          )}
+        </div>
 
-      <section className="flex flex-col gap-1.5">
-        {model.todos.length > 0 && <BandLabel>Todos</BandLabel>}
-        {model.todos.map((row, index) =>
-          row.critical ? (
-            <CriticalRow
-              key={row.item.id}
-              item={row.item}
-              where={row.where}
-              fact={row.fact ?? { text: "", tone: "red" }}
-            />
-          ) : (
-            <TodoRow
-              key={row.item.id}
-              item={row.item}
-              where={row.where}
-              fact={row.fact}
-              promoted={row.item.deadline === null}
-              last={index === model.todos.length - 1}
-            />
-          ),
-        )}
+        <div role="tabpanel" className="flex flex-col gap-1.5 pt-5">
+          {tab === "todo" &&
+            model.todos.map((row, index) =>
+              row.critical ? (
+                <CriticalRow
+                  key={row.item.id}
+                  item={row.item}
+                  where={row.where}
+                  fact={row.fact ?? { text: "", tone: "red" }}
+                />
+              ) : (
+                <TodoRow
+                  key={row.item.id}
+                  item={row.item}
+                  where={row.where}
+                  fact={row.fact}
+                  promoted={row.item.deadline === null}
+                  last={index === model.todos.length - 1}
+                />
+              ),
+            )}
 
-        {model.waiting.length > 0 && (
-          <span className="label pt-[26px] pb-2 text-muted">Waiting on them</span>
-        )}
-        {model.waiting.map((row, index) => (
-          <WaitingRow
-            key={row.item.id}
-            item={row.item}
-            where={row.where}
-            fact={row.fact}
-            last={index === model.waiting.length - 1}
-          />
-        ))}
+          {tab === "waiting" &&
+            model.waiting.map((row, index) => (
+              <WaitingRow
+                key={row.item.id}
+                item={row.item}
+                where={row.where}
+                fact={row.fact}
+                last={index === model.waiting.length - 1}
+              />
+            ))}
 
-        {model.ideas.length > 0 && (
-          <span className="label pt-[26px] pb-2 text-muted">Ideas</span>
-        )}
-        {model.ideas.map((row, index) => (
-          <IdeaRow
-            key={row.item.id}
-            item={row.item}
-            where={row.where}
-            wasInProgress={row.item.startedOn !== null}
-            last={index === model.ideas.length - 1}
-          />
-        ))}
+          {tab === "idea" &&
+            model.ideas.map((row, index) => (
+              <IdeaRow
+                key={row.item.id}
+                item={row.item}
+                where={row.where}
+                wasInProgress={row.item.startedOn !== null}
+                last={index === model.ideas.length - 1}
+              />
+            ))}
 
-        {model.todos.length + model.waiting.length + model.ideas.length === 0 && (
-          <span className="text-[15px] leading-relaxed text-sleeping">
-            Nothing open with them. ⌘⇧L when there is.
-          </span>
-        )}
+          {tab === "pulls" &&
+            model.pulls.map((group, groupIndex) => (
+              <div key={group.project.id} className="flex flex-col">
+                {/* One project needs no naming twice; several each get a line. */}
+                {(model.pulls.length > 1 || model.projects.length > 1) && (
+                  <span
+                    className={`fact pb-2 text-[11px] text-faint ${groupIndex > 0 ? "pt-5" : ""}`}
+                  >
+                    {group.name}
+                  </span>
+                )}
+                {group.rows.map(({ pull, where, fact }, index) => (
+                  <button
+                    key={pull.key}
+                    type="button"
+                    title="Open on GitHub"
+                    onClick={() => openExternal(pull.url)}
+                    className={`group flex items-center gap-4 border-t border-hairline py-[13px] text-left ${
+                      index === group.rows.length - 1 ? "border-b" : ""
+                    }`}
+                  >
+                    <div className="flex min-w-0 flex-1 flex-col gap-1">
+                      <span className="truncate text-[15px] leading-[1.4] text-text decoration-[#3a423e] underline-offset-[3px] group-hover:underline">
+                        {pull.title}
+                      </span>
+                      <span className="fact truncate text-[11px] text-faint">{where}</span>
+                    </div>
+                    <Fact tone={fact.tone}>{fact.text}</Fact>
+                  </button>
+                ))}
+              </div>
+            ))}
+
+          {tabs.find((t) => t.id === tab)?.count === 0 && (
+            <span className="text-[15px] leading-relaxed text-sleeping">{EMPTY[tab]}</span>
+          )}
+        </div>
 
         {model.archiveLine && (
-          <span className="fact pt-3.5 text-[11px] leading-[1.7] text-faint">
+          <span className="fact pt-5 text-[11px] leading-[1.7] text-faint">
             {model.archiveLine}
           </span>
         )}
@@ -347,19 +448,47 @@ function ProjectSheet({
   const snapshot = useSnapshot();
   const { act } = useStore();
   const [name, setName] = useState(project?.name ?? "");
+  const [repoText, setRepoText] = useState(
+    project ? reposOf(snapshot, project.id).join(", ") : "",
+  );
   const trimmed = name.trim();
   const taken = projectsOf(snapshot, clientId).some(
     (p) => p.id !== project?.id && p.name.toLowerCase() === trimmed.toLowerCase(),
   );
+  const { repos, bad } = parseRepos(repoText);
+  // A repository answers to one project, so naming another project's moves it.
+  const moving = repos
+    .map((repo) => ({ repo, from: projectOfRepo(snapshot, repo) }))
+    .filter(({ from }) => from && from.id !== project?.id);
+  // Repositories with open pull requests that no project has claimed yet —
+  // most likely what belongs here, so they are one click away.
+  const suggestions = [
+    ...new Set(
+      snapshot.pulls.filter((p) => !projectOfRepo(snapshot, p.repo)).map((p) => p.repo),
+    ),
+  ].filter((repo) => !repos.some((r) => r.toLowerCase() === repo.toLowerCase()));
+  const usable = trimmed !== "" && !taken && bad.length === 0;
 
   const save = () => {
-    if (!trimmed || taken) return;
-    void act((db, c) =>
-      project
-        ? projectRepo.rename(db, project.id, trimmed)
-        : projectRepo.create(db, c, clientId, trimmed),
-    ).then(onClose);
+    if (!usable) return;
+    void act(async (db, c) => {
+      const id = project
+        ? (await projectRepo.rename(db, project.id, trimmed), project.id)
+        : await projectRepo.create(db, c, clientId, trimmed);
+      await projectRepos.setFor(db, id, repos);
+      // Pull requests already cached for a newly linked repository get
+      // their todos now, rather than at the next sync.
+      await githubPulls.ensureTodos(db, c);
+    }).then(onClose);
   };
+
+  const hint = taken
+    ? "this client already has a project by that name"
+    : bad.length > 0
+      ? `“${bad[0]}” doesn't read as owner/name`
+      : moving.length > 0
+        ? `${moving[0].repo} moves here from ${moving[0].from?.name}`
+        : `⏎ ${project ? "save" : "add"} · esc dismiss`;
 
   return (
     <SmallSheet title={project ? "Edit project" : "New project"} onSave={save} onClose={onClose}>
@@ -370,19 +499,42 @@ function ProjectSheet({
         placeholder="Project name"
         className="w-full rounded-lg border border-outline bg-[#212624] px-3.5 py-3 text-[17px] text-text outline-none placeholder:text-faint focus:border-outline-hover"
       />
+      <input
+        value={repoText}
+        onChange={(e) => setRepoText(e.target.value)}
+        placeholder="GitHub repositories — owner/name, comma-separated (optional)"
+        className="w-full rounded-lg border border-outline bg-[#212624] px-3.5 py-2.5 font-mono text-[13px] text-text outline-none placeholder:font-sans placeholder:text-[15px] placeholder:text-faint focus:border-outline-hover"
+      />
+      {suggestions.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          {suggestions.map((repo) => (
+            <button
+              key={repo}
+              type="button"
+              onClick={() => setRepoText([...repos, ...bad, repo].join(", "))}
+              className="rounded-md border border-outline px-[11px] py-1.5 font-mono text-[12px] text-sleeping transition-colors hover:text-text"
+            >
+              + {repo}
+            </button>
+          ))}
+          <span className="fact text-[11px] text-faint">open pull requests, no project yet</span>
+        </div>
+      )}
       <div className="flex items-center gap-4 pt-1">
         <button
           type="button"
           onClick={save}
-          disabled={!trimmed || taken}
+          disabled={!usable}
           className="rounded-lg bg-green px-4 py-2 text-sm text-ink transition-colors hover:bg-green-hover disabled:opacity-40"
         >
           {project ? "Save" : "Add project"}
         </button>
-        <span className={`fact text-[11px] ${taken ? "text-amber" : "text-faint"}`}>
-          {taken
-            ? "this client already has a project by that name"
-            : `⏎ ${project ? "save" : "add"} · esc dismiss`}
+        <span
+          className={`fact text-[11px] ${
+            taken || bad.length > 0 || moving.length > 0 ? "text-amber" : "text-faint"
+          }`}
+        >
+          {hint}
         </span>
       </div>
     </SmallSheet>

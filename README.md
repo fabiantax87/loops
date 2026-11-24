@@ -5,7 +5,8 @@ you owe, the answers you're waiting on, and the ideas you'd get to on a quiet
 day. An awareness layer, not an execution layer — no sprints, no boards, no
 sub-tasks. You read it in the morning and it tells you when to stop reading.
 
-Tauri 2 · React · TypeScript · SQLite. All local: no accounts, no network.
+Tauri 2 · React · TypeScript · SQLite. All local: no accounts of its own, and
+the only network traffic is three read-only integrations you opt into.
 
 ## Running it
 
@@ -55,7 +56,7 @@ browser.
 | --- | --- |
 | `src-tauri/migrations/` | The schema. One source of truth, run by Rust in the app and by `src/db/migrations.ts` in tests |
 | `src/domain/` | All the logic: the dashboard bands, idea selection, chase windows, the capture parser, the calendar's capacity and summary sentences |
-| `src/google/`, `src/productive/` | The two read-only integrations: auth, the API calls, and a window sync each |
+| `src/google/`, `src/productive/`, `src/github/` | The three read-only integrations: auth, the API calls, and a sync each |
 | `src/db/` | The `SqlDriver` seam and its three implementations (Tauri, `node:sqlite`, sql.js) |
 | `src/ui/` | Screens and the handful of primitives they share |
 | `src/dev/` | The seeded demo data, and the script that writes it into the real database |
@@ -72,6 +73,20 @@ the day runs over. Credentials live in the macOS Keychain: the Google refresh
 token, and the Productive personal API token (Settings → API integrations in
 Productive, pasted with the organization id). If Productive stops answering,
 bookings drop out of every view rather than going stale.
+
+**Pull requests chase themselves.** Connect GitHub from the foot of the rail
+(a personal access token: classic with `repo`, or fine-grained with read
+access to pull requests) and give each project its repositories — edit the
+project on the client page. Every open pull request you wrote, were assigned,
+or were asked to review is cached in `github_pulls` and listed per project on
+the client page. Each one also makes itself an ordinary todo, due a week after
+the pull request opened, with the link in its notes — so a forgotten one goes
+critical on Today like any other missed deadline. When the pull request merges
+the todo closes as done; closed unmerged it is dropped; a review you gave
+counts as done. Ticking the todo off by hand does not bring it back, and a
+deadline you rescheduled is left alone. Pull requests in repositories no
+project claims make no todo; the project sheet offers those repositories as
+suggestions.
 
 **Time is injected.** Nothing calls `new Date()`; the clock comes from
 `src/lib/clock.ts`, so tests walk the app forward through deadlines and

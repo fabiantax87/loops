@@ -1,5 +1,5 @@
 import type { Clock } from "../lib/clock";
-import { daysBetween, today } from "../lib/time";
+import { daysBetween, instantToDay, today } from "../lib/time";
 import {
   contactById,
   contactsOf,
@@ -8,7 +8,7 @@ import {
   type Snapshot,
 } from "./snapshot";
 import { chaseDue, noteDay, type TimeFact, type Tone, niceDay } from "./today";
-import type { Contact, Item, Project } from "./types";
+import type { Contact, Item, Project, Pull } from "./types";
 import { countOf, sentences, spell, spellCapitalised } from "./words";
 
 export interface ProjectLine {
@@ -28,6 +28,22 @@ export interface ClientItemRow {
   chaseDue: boolean;
 }
 
+export interface PullRow {
+  pull: Pull;
+  /** "linku/etrl-portal #482 · Sanne asked for your review" */
+  where: string;
+  /** How long it has been open. Red only when its todo has gone past. */
+  fact: TimeFact;
+}
+
+/** One project's open pull requests, oldest first. */
+export interface PullGroup {
+  project: Project;
+  /** The project's name without the client's — the page already says it. */
+  name: string;
+  rows: PullRow[];
+}
+
 export interface ClientPageModel {
   name: string;
   /** The paragraph under the name: what is late, who is quiet, what is fine. */
@@ -37,6 +53,8 @@ export interface ClientPageModel {
   todos: ClientItemRow[];
   waiting: ClientItemRow[];
   ideas: ClientItemRow[];
+  /** Open pull requests, per project. Projects with none are left out. */
+  pulls: PullGroup[];
   /** "Nine resolved items this quarter · in the archive" */
   archiveLine: string | null;
 }
@@ -143,6 +161,34 @@ export function buildClientPage(
       ),
     );
 
+  // A pull request's row goes red exactly when the todo it made has: red still
+  // means a deadline went past, and nothing else.
+  const lateKeys = new Set(late.map((i) => i.pullKey).filter(Boolean));
+  const pulls: PullGroup[] = projectsOf(snapshot, clientId)
+    .map((project) => {
+      const repos = new Set(
+        snapshot.repos.filter((r) => r.projectId === project.id).map((r) => r.repo.toLowerCase()),
+      );
+      const rows = snapshot.pulls
+        .filter((p) => repos.has(p.repo.toLowerCase()))
+        .sort((a, b) => a.openedAt.localeCompare(b.openedAt))
+        .map((pull): PullRow => {
+          const days = daysBetween(instantToDay(pull.openedAt), now);
+          return {
+            pull,
+            where: [`${pull.repo} #${pull.number}`, pullRole(pull), pull.draft ? "draft" : null]
+              .filter(Boolean)
+              .join(" · "),
+            fact: {
+              text: days <= 0 ? "opened today" : `open ${countOf(days, "day")}`,
+              tone: lateKeys.has(pull.key) ? "red" : "grey",
+            },
+          };
+        });
+      return { project, name: shortProjectName(project, snapshot), rows };
+    })
+    .filter((group) => group.rows.length > 0);
+
   const closed = snapshot.items.filter(
     (i) => i.clientId === clientId && i.status === "closed",
   ).length;
@@ -155,6 +201,7 @@ export function buildClientPage(
     todos,
     waiting,
     ideas,
+    pulls,
     archiveLine:
       closed > 0
         ? `${spellCapitalised(closed)} resolved ${closed === 1 ? "item" : "items"} · in the archive`
@@ -229,6 +276,13 @@ function summarise(
   }
 
   return sentences(...parts);
+}
+
+/** Whose move a pull request is, in the fewest words. */
+function pullRole(pull: Pull): string {
+  if (pull.reviewRequested) return `${pull.author ?? "someone"} asked for your review`;
+  if (pull.authored) return "yours";
+  return "assigned to you";
 }
 
 /** "Eurotransplant Corporate" reads as "Corporate" on Eurotransplant's own page. */

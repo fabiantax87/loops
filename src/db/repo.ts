@@ -3,7 +3,16 @@ import type { Clock } from "../lib/clock";
 import { type Day, type Instant, addDays, daysBetween, nowInstant, toDay, today } from "../lib/time";
 import type { IdeasOfDay, Snapshot } from "../domain/snapshot";
 import type { Booking, Meeting } from "../domain/calendar";
-import type { Client, Contact, Item, ItemKind, Project, ProjectStatus } from "../domain/types";
+import type {
+  Client,
+  Contact,
+  Item,
+  ItemKind,
+  ItemOutcome,
+  Project,
+  ProjectStatus,
+  Pull,
+} from "../domain/types";
 
 /* Rows come back snake_case; the app speaks camelCase. The mapping is dull and
    lives here so nothing else has to know about it. */
@@ -69,17 +78,37 @@ function item(r: Row): Item {
     createdAt: r.created_at,
     updatedAt: r.updated_at,
     closedAt: r.closed_at,
+    pullKey: r.pull_key ?? null,
+  };
+}
+
+function pull(r: Row): Pull {
+  return {
+    key: r.key,
+    repo: r.repo,
+    number: r.number,
+    title: r.title,
+    url: r.url,
+    author: r.author,
+    authored: !!r.authored,
+    assigned: !!r.assigned,
+    reviewRequested: !!r.review_requested,
+    draft: !!r.draft,
+    openedAt: r.opened_at,
+    updatedAt: r.updated_at,
   };
 }
 
 const IDEAS_OF_DAY_KEY = "ideas_of_day";
 
 export async function loadSnapshot(db: SqlDriver): Promise<Snapshot> {
-  const [clients, projects, contacts, items, ideasRaw] = await Promise.all([
+  const [clients, projects, contacts, items, repos, pulls, ideasRaw] = await Promise.all([
     db.select<Row>("SELECT * FROM clients ORDER BY name COLLATE NOCASE"),
     db.select<Row>("SELECT * FROM projects ORDER BY name COLLATE NOCASE"),
     db.select<Row>("SELECT * FROM contacts ORDER BY name COLLATE NOCASE"),
     db.select<Row>("SELECT * FROM items ORDER BY created_at, id"),
+    db.select<Row>("SELECT * FROM project_repos ORDER BY repo"),
+    db.select<Row>("SELECT * FROM github_pulls ORDER BY opened_at, key"),
     meta.get(db, IDEAS_OF_DAY_KEY),
   ]);
   return {
@@ -87,6 +116,8 @@ export async function loadSnapshot(db: SqlDriver): Promise<Snapshot> {
     projects: projects.map(project),
     contacts: contacts.map(contact),
     items: items.map(item),
+    repos: repos.map((r) => ({ repo: r.repo, projectId: r.project_id })),
+    pulls: pulls.map(pull),
     ideasOfDay: ideasRaw ? (JSON.parse(ideasRaw) as IdeasOfDay) : null,
   };
 }
@@ -748,6 +779,180 @@ export const productiveBookings = {
 
   async clear(db: SqlDriver): Promise<void> {
     await db.execute("DELETE FROM productive_bookings");
+  },
+};
+
+/** Which repositories a project answers for. */
+export const projectRepos = {
+  /**
+   * The project's repositories, replaced as a set. A repository belongs to one
+   * project, so naming one that another project holds moves it here.
+   */
+  async setFor(db: SqlDriver, projectId: number, repos: string[]): Promise<void> {
+    await db.execute("DELETE FROM project_repos WHERE project_id = ?", [projectId]);
+    for (const repo of repos) {
+      await db.execute(
+        `INSERT INTO project_repos (repo, project_id) VALUES (?, ?)
+         ON CONFLICT (repo) DO UPDATE SET project_id = excluded.project_id`,
+        [repo.trim(), projectId],
+      );
+    }
+  },
+};
+
+/** A pull request gets a week before the todo it made goes critical. */
+export const PULL_DEADLINE_DAYS = 7;
+
+/**
+ * Why a pull request stopped being in the open set:
+ *   merged   — it landed; the todo is done.
+ *   closed   — closed without merging; the todo is dropped.
+ *   released — still open, but no longer yours (reviewed, unassigned); done.
+ *   mine     — still open and still yours: GitHub's search blinked. Keep it.
+ */
+export type PullFate = "merged" | "closed" | "released" | "mine";
+
+const FATE_OUTCOME: Record<Exclude<PullFate, "mine">, ItemOutcome> = {
+  merged: "done",
+  closed: "dropped",
+  released: "done",
+};
+
+function pullTodoTitle(p: Pull): string {
+  return p.reviewRequested
+    ? `Review PR #${p.number}: ${p.title}`
+    : `Get PR #${p.number} merged: ${p.title}`;
+}
+
+/** The link first — it is what the todo is for — then whose move it is. */
+function pullTodoNotes(p: Pull): string {
+  const why = p.reviewRequested
+    ? `${p.author ?? "Someone"} asked for your review in ${p.repo}.`
+    : p.authored
+      ? `Your pull request in ${p.repo}.`
+      : `Assigned to you in ${p.repo}${p.author ? `, opened by ${p.author}` : ""}.`;
+  return `${p.url}\n${why}`;
+}
+
+/**
+ * The local cache of open pull requests, and the todos they keep in step with
+ * it. GitHub owns the pull requests; the todos are ordinary items that happen
+ * to remember where they came from — rescheduled, edited and finished like any
+ * other, and closed for you the moment the pull request is.
+ */
+export const githubPulls = {
+  async list(db: SqlDriver): Promise<Pull[]> {
+    const rows = await db.select<Row>("SELECT * FROM github_pulls ORDER BY opened_at, key");
+    return rows.map(pull);
+  },
+
+  /**
+   * One sync's worth of truth: `open` is every pull request GitHub says is
+   * yours right now, `fates` says what became of the cached ones no longer in
+   * it. Pull requests that left take their todo with them; new ones get one.
+   */
+  async replaceAll(
+    db: SqlDriver,
+    clock: Clock,
+    open: Pull[],
+    fates: Map<string, PullFate>,
+  ): Promise<void> {
+    const at = nowInstant(clock);
+    const still = new Set(open.map((p) => p.key));
+    const cached = await db.select<{ key: string }>("SELECT key FROM github_pulls");
+    for (const { key } of cached) {
+      if (still.has(key)) continue;
+      const fate = fates.get(key) ?? "released";
+      if (fate === "mine") continue;
+      await db.execute("DELETE FROM github_pulls WHERE key = ?", [key]);
+      await db.execute(
+        `UPDATE items SET status = 'closed', outcome = ?, closed_at = ?, updated_at = ?
+          WHERE pull_key = ? AND status = 'open'`,
+        [FATE_OUTCOME[fate], at, at, key],
+      );
+    }
+
+    for (const p of open) {
+      await db.execute(
+        `INSERT INTO github_pulls
+           (key, repo, number, title, url, author, authored, assigned,
+            review_requested, draft, opened_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (key) DO UPDATE SET
+           repo = excluded.repo, number = excluded.number, title = excluded.title,
+           url = excluded.url, author = excluded.author, authored = excluded.authored,
+           assigned = excluded.assigned, review_requested = excluded.review_requested,
+           draft = excluded.draft, opened_at = excluded.opened_at,
+           updated_at = excluded.updated_at`,
+        [
+          p.key,
+          p.repo,
+          p.number,
+          p.title,
+          p.url,
+          p.author,
+          p.authored ? 1 : 0,
+          p.assigned ? 1 : 0,
+          p.reviewRequested ? 1 : 0,
+          p.draft ? 1 : 0,
+          p.openedAt,
+          p.updatedAt,
+        ],
+      );
+    }
+
+    await githubPulls.ensureTodos(db, clock);
+  },
+
+  /**
+   * Every cached pull request in a repository some project claims gets its
+   * todo, once. The deadline is a week after the pull request opened — so one
+   * that has already sat for a fortnight arrives critical, which is the point.
+   * A pull request that left and came back gets a fresh week from today.
+   *
+   * Runs after a sync, and after a repository is linked to a project (the
+   * pull requests were already cached; only now do they have somewhere to go).
+   */
+  async ensureTodos(db: SqlDriver, clock: Clock): Promise<number> {
+    const at = nowInstant(clock);
+    const day = today(clock);
+    const rows = await db.select<Row>(
+      `SELECT g.*, r.project_id AS project_id, p.client_id AS client_id
+         FROM github_pulls g
+         JOIN project_repos r ON r.repo = g.repo
+         JOIN projects p ON p.id = r.project_id
+        WHERE g.tasked = 0
+        ORDER BY g.opened_at, g.key`,
+    );
+    let made = 0;
+    for (const r of rows) {
+      const p = pull(r);
+      const earlier = await db.select<{ status: string }>(
+        "SELECT status FROM items WHERE pull_key = ?",
+        [p.key],
+      );
+      if (!earlier.some((i) => i.status === "open")) {
+        const deadline =
+          earlier.length > 0
+            ? addDays(day, PULL_DEADLINE_DAYS)
+            : addDays(toDay(new Date(p.openedAt)), PULL_DEADLINE_DAYS);
+        await db.execute(
+          `INSERT INTO items
+             (client_id, project_id, kind, title, notes, deadline, pull_key,
+              created_at, updated_at)
+           VALUES (?, ?, 'todo', ?, ?, ?, ?, ?, ?)`,
+          [r.client_id, r.project_id, pullTodoTitle(p), pullTodoNotes(p), deadline, p.key, at, at],
+        );
+        made += 1;
+      }
+      await db.execute("UPDATE github_pulls SET tasked = 1 WHERE key = ?", [p.key]);
+    }
+    return made;
+  },
+
+  /** Disconnecting takes the borrowed data with it. The todos stay yours. */
+  async clear(db: SqlDriver): Promise<void> {
+    await db.execute("DELETE FROM github_pulls");
   },
 };
 

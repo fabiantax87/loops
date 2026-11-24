@@ -1,6 +1,7 @@
 import type { SqlDriver } from "../db/driver";
 import type { Clock } from "../lib/clock";
 import { type Day, addDays, dayStart, nowInstant, today } from "../lib/time";
+import { githubPulls } from "../db/repo";
 import type { ItemKind, ItemOutcome } from "../domain/types";
 
 /**
@@ -361,6 +362,175 @@ export async function seed(db: SqlDriver, clock: Clock): Promise<void> {
 
   await seedMeetings(db, clock);
   await seedBookings(db, clock);
+  await seedPulls(db, clock, projectIds);
+}
+
+/**
+ * Open pull requests of every kind and age, in repositories four projects
+ * claim and one nobody does. The todos are not written here: the same
+ * `ensureTodos` a real sync ends with makes them, so the demo shows what the
+ * app would actually do — two already past their week, one landing today.
+ */
+async function seedPulls(
+  db: SqlDriver,
+  clock: Clock,
+  projectIds: Map<string, number>,
+): Promise<void> {
+  const now = today(clock);
+  const at = (daysAgo: number, hour = 10): string =>
+    new Date(dayStart(addDays(now, -daysAgo)).getTime() + hour * 3600_000).toISOString();
+
+  const REPOS: [repo: string, project: string][] = [
+    ["linku/eurotransplant-corporate", "Eurotransplant Corporate"],
+    ["linku/etrl-portal", "Eurotransplant ETRL"],
+    ["linku/etrl-api", "Eurotransplant ETRL"],
+    ["klokgroep/frontend", "Klokgroep Frontend"],
+    ["meridian-health/portal", "Portal rebuild"],
+  ];
+  for (const [repo, project] of REPOS) {
+    await db.execute("INSERT INTO project_repos (repo, project_id) VALUES (?, ?)", [
+      repo,
+      projectIds.get(project),
+    ]);
+  }
+
+  const ME = "fabiantax87";
+  const PULLS: {
+    repo: string;
+    number: number;
+    title: string;
+    author: string;
+    role: "authored" | "assigned" | "review";
+    openedDaysAgo: number;
+    /** Days since anything happened on it; defaults to the day it opened. */
+    quietDays?: number;
+    draft?: boolean;
+  }[] = [
+    // Twelve days open, five past its week: arrives critical.
+    {
+      repo: "linku/eurotransplant-corporate",
+      number: 214,
+      title: "Redirect map for the retired /donor pages",
+      author: ME,
+      role: "authored",
+      openedDaysAgo: 12,
+      quietDays: 8,
+    },
+    // Fresh review request — five days of room left.
+    {
+      repo: "linku/eurotransplant-corporate",
+      number: 221,
+      title: "Cookie banner: remember the choice across subdomains",
+      author: "joost-bakker",
+      role: "review",
+      openedDaysAgo: 2,
+    },
+    // Exactly a week old: due today.
+    {
+      repo: "linku/etrl-portal",
+      number: 482,
+      title: "Fix date picker overflow on the allocation form",
+      author: "sanne-dv",
+      role: "assigned",
+      openedDaysAgo: 7,
+      quietDays: 3,
+    },
+    // A second repository on the same project.
+    {
+      repo: "linku/etrl-api",
+      number: 97,
+      title: "Paginate /matches so the portal stops timing out",
+      author: ME,
+      role: "authored",
+      openedDaysAgo: 3,
+    },
+    // Bram has been waiting nine days for a review: critical.
+    {
+      repo: "klokgroep/frontend",
+      number: 1038,
+      title: "Replace the icon font with SVG sprites",
+      author: "bram-h",
+      role: "review",
+      openedDaysAgo: 9,
+    },
+    // A draft of your own still counts — it is open, and it is yours.
+    {
+      repo: "klokgroep/frontend",
+      number: 1051,
+      title: "Token pipeline: generate CSS variables from Figma",
+      author: ME,
+      role: "authored",
+      openedDaysAgo: 1,
+      draft: true,
+    },
+    {
+      repo: "meridian-health/portal",
+      number: 63,
+      title: "Appointment list: empty and loading states",
+      author: ME,
+      role: "authored",
+      openedDaysAgo: 4,
+      quietDays: 1,
+    },
+    // No project claims this repository, so it gets no todo and no overview —
+    // the project sheet offers it as a suggestion instead.
+    {
+      repo: "linku/internal-tools",
+      number: 12,
+      title: "Bump the deploy action to node 24",
+      author: "dependabot[bot]",
+      role: "review",
+      openedDaysAgo: 5,
+    },
+  ];
+
+  for (const p of PULLS) {
+    await db.execute(
+      `INSERT INTO github_pulls
+         (key, repo, number, title, url, author, authored, assigned,
+          review_requested, draft, opened_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        `${p.repo}#${p.number}`,
+        p.repo,
+        p.number,
+        p.title,
+        `https://github.com/${p.repo}/pull/${p.number}`,
+        p.author,
+        p.role === "authored" ? 1 : 0,
+        p.role === "assigned" ? 1 : 0,
+        p.role === "review" ? 1 : 0,
+        p.draft ? 1 : 0,
+        at(p.openedDaysAgo, 9),
+        at(p.quietDays ?? p.openedDaysAgo, 16),
+      ],
+    );
+  }
+  await githubPulls.ensureTodos(db, clock);
+
+  // One that already merged: its todo closed itself and sits in the archive.
+  const merged = {
+    repo: "linku/etrl-portal",
+    number: 476,
+    title: "Allocation form: validate the donor id as you type",
+  };
+  await db.execute(
+    `INSERT INTO items
+       (client_id, project_id, kind, title, notes, deadline, pull_key, status,
+        outcome, created_at, updated_at, closed_at)
+     SELECT client_id, id, 'todo', ?, ?, ?, ?, 'closed', 'done', ?, ?, ?
+       FROM projects WHERE id = ?`,
+    [
+      `Get PR #${merged.number} merged: ${merged.title}`,
+      `https://github.com/${merged.repo}/pull/${merged.number}\nYour pull request in ${merged.repo}.`,
+      addDays(now, 1),
+      `${merged.repo}#${merged.number}`,
+      at(6),
+      at(1, 15),
+      at(1, 15),
+      projectIds.get("Eurotransplant ETRL"),
+    ],
+  );
 }
 
 /**

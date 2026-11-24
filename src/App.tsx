@@ -4,6 +4,7 @@ import type { SqlDriver } from "./db/driver";
 import { openDb } from "./db/tauri";
 import { systemClock } from "./lib/clock";
 import { StoreProvider, useSnapshot, useStore } from "./state/store";
+import { useGithub } from "./state/githubSync";
 import { useUpdater } from "./state/updater";
 import { useHotWatch } from "./state/watch";
 import { Capture, type CapturePreset } from "./ui/Capture";
@@ -11,6 +12,7 @@ import { CaptureWindow } from "./ui/CaptureWindow";
 import { TitleBar } from "./ui/Chrome";
 import { NewClientSheet } from "./ui/NewClientSheet";
 import { Rail } from "./ui/Rail";
+import { SettingsSheet } from "./ui/SettingsSheet";
 import { ArchiveScreen } from "./ui/ArchiveScreen";
 import { CalendarScreen } from "./ui/calendar/CalendarScreen";
 import { ClientScreen } from "./ui/ClientScreen";
@@ -22,11 +24,16 @@ import "./styles.css";
 function Workspace() {
   const [screen, setScreen] = useState<Screen>({ name: "today" });
   const [naming, setNaming] = useState(false);
+  const [settings, setSettings] = useState(false);
+  // The calendar holds its own view of the two calendar connections; closing
+  // Settings remounts it so a connection made there shows at once.
+  const [connectionsEpoch, setConnectionsEpoch] = useState(0);
   const [capturing, setCapturing] = useState<CapturePreset | null>(null);
   const snapshot = useSnapshot();
   const { loading } = useStore();
   useHotWatch(snapshot);
-  const { update, restart } = useUpdater();
+  const { update, restart, check } = useUpdater();
+  const github = useGithub();
 
   // ⌘⇧L in the packaged app is a global shortcut that opens the capture
   // popup window; this DOM fallback keeps the chord working at localhost,
@@ -84,7 +91,12 @@ function Workspace() {
         )}
       </TitleBar>
       <div className="flex min-h-0 flex-1">
-        <Rail screen={screen} go={setScreen} onNewClient={() => setNaming(true)} />
+        <Rail
+          screen={screen}
+          go={setScreen}
+          onNewClient={() => setNaming(true)}
+          onSettings={() => setSettings(true)}
+        />
         {/* items-start matters: as a stretched flex item the reading column
             would be pinned to the viewport height and its content would
             overflow past its own bottom padding. */}
@@ -92,7 +104,7 @@ function Workspace() {
           {loading ? null : screen.name === "today" ? (
             <TodayScreen go={setScreen} onNewClient={() => setNaming(true)} />
           ) : screen.name === "calendar" ? (
-            <CalendarScreen />
+            <CalendarScreen key={connectionsEpoch} onOpenSettings={() => setSettings(true)} />
           ) : screen.name === "client" ? (
             <ClientScreen
               clientId={screen.clientId}
@@ -115,6 +127,18 @@ function Workspace() {
       </div>
       {capturing && (
         <Capture preset={capturing} onClose={() => setCapturing(null)} />
+      )}
+      {settings && (
+        <SettingsSheet
+          github={github}
+          update={update}
+          onCheckUpdates={check}
+          onRestart={restart}
+          onClose={() => {
+            setSettings(false);
+            setConnectionsEpoch((n) => n + 1);
+          }}
+        />
       )}
       {naming && (
         <NewClientSheet

@@ -1,5 +1,5 @@
 import type { Day } from "../lib/time";
-import type { Client, Contact, Item, Project } from "./types";
+import type { Client, Contact, Item, Project, ProjectRepo, Pull } from "./types";
 
 /**
  * The ideas surfaced on a quiet day are chosen once, in the morning, and stay
@@ -24,6 +24,10 @@ export interface Snapshot {
   projects: Project[];
   contacts: Contact[];
   items: Item[];
+  /** Which repositories belong to which project. */
+  repos: ProjectRepo[];
+  /** Open pull requests that are yours to move — the GitHub cache. */
+  pulls: Pull[];
   ideasOfDay: IdeasOfDay | null;
 }
 
@@ -32,6 +36,8 @@ export const emptySnapshot: Snapshot = {
   projects: [],
   contacts: [],
   items: [],
+  repos: [],
+  pulls: [],
   ideasOfDay: null,
 };
 
@@ -53,6 +59,17 @@ export function projectsOf(snapshot: Snapshot, clientId: number): Project[] {
 
 export function contactsOf(snapshot: Snapshot, clientId: number): Contact[] {
   return snapshot.contacts.filter((c) => c.clientId === clientId);
+}
+
+export function reposOf(snapshot: Snapshot, projectId: number): string[] {
+  return snapshot.repos.filter((r) => r.projectId === projectId).map((r) => r.repo);
+}
+
+/** The project a repository answers to, if any has claimed it. */
+export function projectOfRepo(snapshot: Snapshot, repo: string): Project | undefined {
+  const wanted = repo.toLowerCase();
+  const link = snapshot.repos.find((r) => r.repo.toLowerCase() === wanted);
+  return link ? projectById(snapshot, link.projectId) : undefined;
 }
 
 export function openItems(snapshot: Snapshot): Item[] {
